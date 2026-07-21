@@ -337,13 +337,61 @@ async function cargar() {
 }
 
 // ---------------------------------------------------------------------------
+// Actualizar ahora -- el agente de la tienda ya NO recalcula solo cada pocos
+// minutos (para no generar carga de fondo en Supabase sin motivo); esto pide
+// una actualización puntual insertando una fila en reportes_solicitudes
+// (mismo mecanismo que ya usa la sincronización de inventario) y espera a
+// que el agente la procese antes de releer los datos frescos.
+// ---------------------------------------------------------------------------
+async function solicitarActualizacion() {
+  if (modoHistorico) { cargar(); return } // los días pasados ya están cerrados, no hace falta pedir nada
+
+  const statusEl = document.getElementById('status')
+  const btn = document.getElementById('btnRefresh')
+  btn.disabled = true
+  statusEl.textContent = 'Solicitando actualización a la tienda...'
+
+  try {
+    const { data, error } = await supabase
+      .from('reportes_solicitudes')
+      .insert({})
+      .select('id')
+      .single()
+    if (error) { statusEl.textContent = 'Error: ' + error.message; return }
+
+    const inicio = Date.now()
+    const TIMEOUT_MS = 100000
+    while (true) {
+      await new Promise((r) => setTimeout(r, 1500))
+      const { data: row, error: errRow } = await supabase
+        .from('reportes_solicitudes')
+        .select('status, mensaje')
+        .eq('id', data.id)
+        .maybeSingle()
+      if (errRow) { statusEl.textContent = 'Error: ' + errRow.message; return }
+      if (row?.status === 'done') { await cargar(); return }
+      if (row?.status === 'error') { statusEl.textContent = 'Error del agente: ' + (row.mensaje || 'sin detalle'); return }
+      if (Date.now() - inicio > TIMEOUT_MS) {
+        statusEl.textContent = 'La tienda no respondió a tiempo (¿está abierto el agente en la PC?). Mostrando la última información disponible.'
+        return
+      }
+      statusEl.textContent = row?.status === 'running'
+        ? 'Actualizando datos en la tienda...'
+        : 'Esperando que el agente de la tienda tome la solicitud...'
+    }
+  } finally {
+    btn.disabled = false
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 function initApp() {
   renderQuickRanges()
   markActiveQuick()
 
-  document.getElementById('btnRefresh').addEventListener('click', cargar)
+  document.getElementById('btnRefresh').addEventListener('click', solicitarActualizacion)
   document.getElementById('btnVerDia').addEventListener('click', () => {
     if (!document.getElementById('fDia').value) return
     modoHistorico = true

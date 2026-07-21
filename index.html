@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reportes de Ventas — Punto Verde Organic</title>
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+
+<div id="gate" class="gate">
+  <form id="gateForm" class="gate-box">
+    <h1>Reportes de Ventas</h1>
+    <p class="subtitle">Punto Verde Organic</p>
+    <input type="password" id="gateClave" placeholder="Clave de acceso" autofocus>
+    <button type="submit" class="btn btn-primary">Entrar</button>
+    <p id="gateError" class="gate-error"></p>
+  </form>
+</div>
+
+<div id="appRoot" style="display:none">
+  <header class="topbar">
+    <div class="topbar-title">
+      <h1>Reportes de Ventas</h1>
+      <span class="subtitle">Punto Verde Organic — datos de AbarrotesPDV</span>
+    </div>
+    <div class="topbar-actions">
+      <span id="status" class="status">Cargando...</span>
+      <button id="btnRefresh" class="btn btn-primary">Recargar</button>
+    </div>
+  </header>
+
+  <div class="filterbar">
+    <div class="filterbar-quick" id="quickRanges"></div>
+    <div class="filterbar-custom">
+      <label>Ver un día pasado <input type="date" id="fDia"></label>
+      <button id="btnVerDia" class="btn btn-secondary">Ver</button>
+    </div>
+  </div>
+
+  <main id="app">
+    <div id="vivoBanner" class="vivo-banner" style="display:none"></div>
+
+    <section class="kpis" id="kpis"></section>
+
+    <section class="card">
+      <div class="card-header"><h2>Ventas por día — periodo seleccionado</h2></div>
+      <div id="chartVentas" class="chart"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Rotación de productos</h2>
+        <div class="table-controls">
+          <input type="text" id="filtroProducto" placeholder="Buscar producto o código...">
+          <select id="filtroDepto"><option value="">Todos los departamentos</option></select>
+        </div>
+      </div>
+      <p class="hint">Clase ABC: <b>A</b> = productos que generan el 80% del ingreso (los críticos), <b>B</b> = siguiente 15%, <b>C</b> = el resto (larga cola / candidatos a revisar). Clic en un encabezado para ordenar.</p>
+      <div id="rotacionProductos" class="table-wrap scroll-y-big"></div>
+    </section>
+
+    <div class="grid-2">
+      <section class="card">
+        <div class="card-header"><h2>Ventas por departamento</h2></div>
+        <div id="porDepartamento" class="table-wrap"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><h2>Formas de pago</h2></div>
+        <div id="formasPago" class="table-wrap"></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <div class="card-header"><h2>Flujo de caja (movimientos manuales)</h2></div>
+      <div class="cashflow-kpis" id="cashflowKpis"></div>
+      <div id="salidasCategoria" class="table-wrap"></div>
+      <p class="hint">La mayoría de "Retiros / depósitos a banco" no son gastos operativos, son traslados de efectivo. Solo "Fletes/envíos" e "Insumos/proveedores" se acercan a un gasto real — el resto queda "Sin categorizar" porque el cajero no dejó una nota reconocible.</p>
+    </section>
+
+    <section class="card">
+      <div class="card-header alert-header">
+        <h2>⚠ Productos con stock bajo</h2>
+        <span id="stockCount" class="badge"></span>
+      </div>
+      <div id="stockBajo" class="table-wrap scroll-y"></div>
+    </section>
+  </main>
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

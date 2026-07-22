@@ -1,11 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-)
-const REPORTES_CLAVE = import.meta.env.VITE_REPORTES_CLAVE || ''
-const SESION_KEY = 'reportes_pdv_autenticado'
+// El cliente de Supabase se crea recién después de un login válido: la
+// URL/clave las entrega el servidor (/api/entrar) sólo cuando la clave de
+// acceso es correcta, así ni la clave ni las credenciales viajan en el
+// bundle público. Ver SERVIDOR.md (Fase A del endurecimiento de accesos).
+let supabase = null
+const SESION_KEY = 'reportes_pdv_sesion'
 
 const money = (n) => '$' + Number(n || 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })
 const num = (n) => Number(n || 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })
@@ -19,35 +19,52 @@ function el(html) {
 }
 
 // ---------------------------------------------------------------------------
-// Clave de acceso (mismo nivel que /admin de inventario-app: gate simple del
-// lado del cliente, no es seguridad real de la base -- ver SERVIDOR.md).
+// Clave de acceso: la validación ocurre en el servidor (/api/entrar). Recién
+// cuando la clave es correcta, el servidor entrega la URL/clave de Supabase,
+// que se guarda en sessionStorage (dura mientras la pestaña siga abierta) y
+// se usa para crear el cliente. Así nadie obtiene credenciales funcionales
+// sin pasar el login. Ver SERVIDOR.md.
 // ---------------------------------------------------------------------------
-function iniciarGate() {
-  const gate = document.getElementById('gate')
-  const appRoot = document.getElementById('appRoot')
+function activarSesion(supabaseUrl, supabaseAnonKey) {
+  supabase = createClient(supabaseUrl, supabaseAnonKey)
+  document.getElementById('gate').style.display = 'none'
+  document.getElementById('appRoot').style.display = ''
+  initApp()
+}
 
-  if (sessionStorage.getItem(SESION_KEY) === '1') {
-    gate.style.display = 'none'
-    appRoot.style.display = ''
-    initApp()
-    return
+function iniciarGate() {
+  const guardado = sessionStorage.getItem(SESION_KEY)
+  if (guardado) {
+    try {
+      const { url, key } = JSON.parse(guardado)
+      if (url && key) { activarSesion(url, key); return }
+    } catch { /* sesión corrupta, se pide login de nuevo */ }
   }
 
-  document.getElementById('gateForm').addEventListener('submit', (e) => {
+  document.getElementById('gateForm').addEventListener('submit', async (e) => {
     e.preventDefault()
     const intentada = document.getElementById('gateClave').value
     const errorEl = document.getElementById('gateError')
-    if (!REPORTES_CLAVE) {
-      errorEl.textContent = 'No se configuró VITE_REPORTES_CLAVE en el servidor.'
-      return
-    }
-    if (intentada === REPORTES_CLAVE) {
-      sessionStorage.setItem(SESION_KEY, '1')
-      gate.style.display = 'none'
-      appRoot.style.display = ''
-      initApp()
-    } else {
-      errorEl.textContent = 'Clave incorrecta.'
+    const btn = e.target.querySelector('button')
+    btn.disabled = true
+    errorEl.textContent = ''
+    try {
+      const resp = await fetch('/api/entrar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clave: intentada }),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (resp.ok && data.ok) {
+        sessionStorage.setItem(SESION_KEY, JSON.stringify({ url: data.supabaseUrl, key: data.supabaseAnonKey }))
+        activarSesion(data.supabaseUrl, data.supabaseAnonKey)
+      } else {
+        errorEl.textContent = data.error || 'Clave incorrecta.'
+      }
+    } catch (err) {
+      errorEl.textContent = 'No se pudo conectar con el servidor. Reintentá.'
+    } finally {
+      btn.disabled = false
     }
   })
 }

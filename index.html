@@ -32,11 +32,12 @@
 
   <div class="filterbar">
     <div class="filterbar-quick" id="quickRanges"></div>
-    <div class="filterbar-custom">
+    <form class="filterbar-custom" id="rangoForm">
+      <span class="filterbar-custom-label">Rango personalizado</span>
       <label>Desde <input type="date" id="fDesde"></label>
       <label>Hasta <input type="date" id="fHasta"></label>
-      <button id="btnAplicar" class="btn btn-secondary">Aplicar rango</button>
-    </div>
+      <button type="submit" class="btn btn-secondary">Aplicar</button>
+    </form>
   </div>
 
   <main id="app">

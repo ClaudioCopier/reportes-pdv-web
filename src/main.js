@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { renderBarChart, renderLineChart } from './chart.js'
 
 // El cliente de Supabase se crea recién después de un login válido: la
 // URL/clave las entrega el servidor (/api/entrar) sólo cuando la clave de
@@ -13,10 +14,13 @@ const dec = (n, d = 1) => Number(n || 0).toLocaleString('es-CL', { minimumFracti
 const pct = (n) => dec(n, 1) + '%'
 
 const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x }
 const toISO = (d) => {
   const p = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
+// Cantidad de días entre dos fechas ISO "YYYY-MM-DD", ambas inclusive.
+const diasEntre = (desdeStr, hastaStr) => Math.round((new Date(hastaStr) - new Date(desdeStr)) / 86400000) + 1
 
 function el(html) {
   const t = document.createElement('template')
@@ -79,28 +83,54 @@ function iniciarGate() {
 // Estado
 // ---------------------------------------------------------------------------
 const RANGOS_RAPIDOS = [
-  { clave: 'hoy', label: 'Hoy' },
-  { clave: 'ayer', label: 'Ayer' },
-  { clave: 'semana', label: 'Esta semana' },
-  { clave: 'mes', label: 'Este mes' },
-  { clave: 'mes_pasado', label: 'Mes pasado' },
+  { clave: 'hoy', label: 'Hoy', tipo: 'rapido' },
+  { clave: 'ayer', label: 'Ayer', tipo: 'rapido' },
+  { clave: 'semana', label: 'Esta semana', tipo: 'rapido' },
+  { clave: 'mes', label: 'Este mes', tipo: 'rapido' },
+  { clave: 'mes_pasado', label: 'Mes pasado', tipo: 'rapido' },
 ]
+// Rangos "últimos N días" -- no tienen fila propia en reportes_ventas_actual,
+// se resuelven como un rango personalizado (mismo mecanismo que fDesde/fHasta,
+// combina reportes_ventas_historico) pero con un solo clic.
+const RANGOS_ULTIMOS = [
+  { clave: 'ultimos_7', dias: 7, label: 'Últimos 7 días', tipo: 'ultimos' },
+  { clave: 'ultimos_15', dias: 15, label: 'Últimos 15 días', tipo: 'ultimos' },
+  { clave: 'ultimos_30', dias: 30, label: 'Últimos 30 días', tipo: 'ultimos' },
+  { clave: 'ultimos_90', dias: 90, label: 'Últimos 90 días', tipo: 'ultimos' },
+]
+const TODOS_CHIPS = [...RANGOS_RAPIDOS, ...RANGOS_ULTIMOS]
 
-let claveActual = 'hoy';
-let modo = 'rapido'; // 'rapido' (5 botones, lee reportes_ventas_actual) | 'rango' (fDesde/fHasta, combina reportes_ventas_historico)
+// Default "Este mes" -- para que "Rotación de productos" no arranque vacía
+// mostrando solo el día de hoy (ver plan: stats.js ya calcula la velocidad
+// de venta dividiendo por los días activos transcurridos del mes, esto solo
+// cambia qué se ve al abrir el sitio).
+let claveActual = 'mes';
+let modo = 'rapido'; // 'rapido' (reportes_ventas_actual) | 'rango' (fDesde/fHasta o "últimos N días", combina reportes_ventas_historico)
+let chipActivo = 'mes' // clave del chip resaltado arriba, o null si el rango activo vino del formulario manual
 let rangoDesde = null
 let rangoHasta = null
+let fechaMinimaHistorico = null // más vieja fecha real guardada en reportes_ventas_historico
 let rotacionData = []
 let sortState = { key: 'ingreso', dir: -1 }
 
 function renderQuickRanges() {
   const box = document.getElementById('quickRanges')
   box.innerHTML = ''
-  RANGOS_RAPIDOS.forEach((r) => {
+  TODOS_CHIPS.forEach((r) => {
     const btn = el(`<button data-clave="${r.clave}">${r.label}</button>`)
     btn.addEventListener('click', () => {
-      modo = 'rapido'
-      claveActual = r.clave
+      chipActivo = r.clave
+      if (r.tipo === 'rapido') {
+        modo = 'rapido'
+        claveActual = r.clave
+      } else {
+        modo = 'rango'
+        const hoy = startOfDay(new Date())
+        rangoHasta = toISO(hoy)
+        rangoDesde = toISO(addDays(hoy, -(r.dias - 1)))
+        document.getElementById('fDesde').value = rangoDesde
+        document.getElementById('fHasta').value = rangoHasta
+      }
       markActiveQuick()
       cargar()
     })
@@ -111,7 +141,7 @@ function renderQuickRanges() {
 function markActiveQuick() {
   const box = document.getElementById('quickRanges')
   ;[...box.children].forEach((btn) => {
-    btn.classList.toggle('active', modo === 'rapido' && btn.dataset.clave === claveActual)
+    btn.classList.toggle('active', btn.dataset.clave === chipActivo)
   })
 }
 
@@ -164,28 +194,15 @@ async function cargarTendencia() {
     .from('reportes_ventas_historico')
     .select('fecha, resumen:datos->resumen')
     .order('fecha')
-  if (error) { box.innerHTML = `<div class="empty">No se pudo cargar la tendencia: ${error.message}</div>`; return }
-  renderTendencia(data || [])
-}
-
-function renderTendencia(filas) {
-  const box = document.getElementById('chartTendencia')
-  box.innerHTML = ''
-  if (!filas.length) { box.appendChild(el('<div class="empty">Todavía no hay suficiente histórico guardado.</div>')); return }
-  const max = Math.max(...filas.map((f) => (f.resumen || {}).total || 0), 1)
-  filas.forEach((f) => {
-    const r = f.resumen || {}
-    const h = Math.max(2, Math.round(((r.total || 0) / max) * 170))
-    const fecha = new Date(f.fecha + 'T00:00:00')
-    const label = fecha.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' })
-    box.appendChild(el(`
-      <div class="bar-col">
-        <div class="bar-tooltip">${label}: ${money(r.total)} · costo ${money(r.costo)} · ganancia ${money(r.gananciaBruta)} (${r.tickets || 0} tickets)</div>
-        <div class="bar" style="height:${h}px"></div>
-        <div class="bar-label">${label}</div>
-      </div>
-    `))
-  })
+  if (error) {
+    box.innerHTML = ''
+    const d = document.createElement('div')
+    d.className = 'empty'
+    d.textContent = 'No se pudo cargar la tendencia: ' + error.message
+    box.appendChild(d)
+    return
+  }
+  renderLineChart(box, data || [], { money, num })
 }
 
 // ---------------------------------------------------------------------------
@@ -205,28 +222,6 @@ async function cargarSalud() {
   } else {
     box.style.display = 'none'
   }
-}
-
-// ---------------------------------------------------------------------------
-// Gráfico de ventas diarias
-// ---------------------------------------------------------------------------
-function renderChart(dias) {
-  const box = document.getElementById('chartVentas')
-  box.innerHTML = ''
-  if (!dias.length) { box.appendChild(el('<div class="empty">Sin datos en este periodo.</div>')); return }
-  const max = Math.max(...dias.map((d) => d.total), 1)
-  dias.forEach((d) => {
-    const h = Math.max(2, Math.round((d.total / max) * 170))
-    const fecha = new Date(d.dia + 'T00:00:00')
-    const label = fecha.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' })
-    box.appendChild(el(`
-      <div class="bar-col">
-        <div class="bar-tooltip">${label}: ${money(d.total)} · costo ${money(d.costo)} · ganancia ${money(d.gananciaBruta)} (${d.tickets} tickets)</div>
-        <div class="bar" style="height:${h}px"></div>
-        <div class="bar-label">${label}</div>
-      </div>
-    `))
-  })
 }
 
 // ---------------------------------------------------------------------------
@@ -483,11 +478,25 @@ function combinarDias(dias) {
   }
 }
 
-function renderRangoBanner() {
+// Mensaje del banner de rango personalizado -- explica de forma explícita
+// cuando el histórico guardado no llega a cubrir todo lo pedido (en vez de
+// que el gráfico/tabla simplemente se vean "cortos" sin avisar). Ver plan:
+// el histórico recién empezó a guardarse hace poco, así que hoy es normal
+// pedir 30 días y encontrar menos -- no es un bug, pero tiene que decirse.
+function renderRangoBanner(diasEncontrados, desdeStr, hastaStr) {
   const box = document.getElementById('rangoBanner')
   if (modo !== 'rango') { box.style.display = 'none'; return }
   box.style.display = 'flex'
-  box.innerHTML = 'ℹ Rango personalizado: se combinan varios días guardados. El comparativo con el periodo anterior y la sección de "Stock bajo" no están disponibles en este modo (son una foto del momento, no se pueden sumar entre días) — usá los rangos rápidos de arriba para verlos.'
+
+  let msg = 'ℹ Rango personalizado: el comparativo con el periodo anterior y "Stock bajo" no están disponibles en este modo (son una foto del momento, no se pueden sumar entre días) — usá los rangos rápidos de arriba para verlos.'
+  if (desdeStr && hastaStr) {
+    const diasPedidos = diasEntre(desdeStr, hastaStr)
+    if (diasEncontrados < diasPedidos) {
+      const desdeHist = fechaMinimaHistorico ? fechaMinimaHistorico.split('-').reverse().join('-') : null
+      msg += ` Se pidieron ${diasPedidos} días pero el histórico guardado tiene ${diasEncontrados}${desdeHist ? ' (empieza el ' + desdeHist + ')' : ''} — no es un error, todavía no se acumuló más historial.`
+    }
+  }
+  box.textContent = msg
 }
 
 async function cargarRango(desdeStr, hastaStr) {
@@ -525,10 +534,15 @@ async function cargarRango(desdeStr, hastaStr) {
     if (hoyRow && hoyRow.datos.periodo?.hasta === hoyStr) dias = [...historico, { fecha: hoyStr, datos: hoyRow.datos }]
   }
 
-  if (!dias.length) { statusEl.textContent = 'Sin reportes guardados en ese rango.'; return }
+  if (!dias.length) {
+    statusEl.textContent = 'Sin reportes guardados en ese rango.'
+    renderRangoBanner(0, desdeStr, hastaStr)
+    return
+  }
 
   pintar(combinarDias(dias))
   statusEl.textContent = `Rango ${desdeStr} a ${hastaStr} — combinando ${dias.length} día(s)`
+  renderRangoBanner(dias.length, desdeStr, hastaStr)
 }
 
 // ---------------------------------------------------------------------------
@@ -537,7 +551,7 @@ async function cargarRango(desdeStr, hastaStr) {
 function pintar(datos) {
   renderVivoBanner(datos.datosEnVivo)
   renderKpis(datos)
-  renderChart(datos.ventasDiarias)
+  renderBarChart(document.getElementById('chartVentas'), datos.ventasDiarias, { money, num })
 
   rotacionData = datos.rotacionProductos
   populateDeptoFilter(rotacionData)
@@ -579,7 +593,7 @@ function pintar(datos) {
 }
 
 async function cargar() {
-  renderRangoBanner()
+  if (modo !== 'rango') { document.getElementById('rangoBanner').style.display = 'none' }
 
   if (modo === 'rango') {
     await cargarRango(rangoDesde, rangoHasta)
@@ -648,6 +662,23 @@ async function solicitarActualizacion() {
   }
 }
 
+// Fecha más antigua real en reportes_ventas_historico -- se usa como piso
+// del input "Desde" (para no dejar pedir un rango que ya sabemos vacío) y en
+// el mensaje de renderRangoBanner() cuando un rango pedido viene incompleto.
+async function cargarFechaMinima() {
+  const { data } = await supabase
+    .from('reportes_ventas_historico')
+    .select('fecha')
+    .order('fecha')
+    .limit(1)
+    .maybeSingle()
+  if (data && data.fecha) {
+    fechaMinimaHistorico = data.fecha
+    document.getElementById('fDesde').min = data.fecha
+    document.getElementById('fHasta').min = data.fecha
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
@@ -656,13 +687,15 @@ function initApp() {
   markActiveQuick()
 
   document.getElementById('btnRefresh').addEventListener('click', solicitarActualizacion)
-  document.getElementById('btnAplicar').addEventListener('click', () => {
+  document.getElementById('rangoForm').addEventListener('submit', (e) => {
+    e.preventDefault()
     const statusEl = document.getElementById('status')
     const desde = document.getElementById('fDesde').value
     const hasta = document.getElementById('fHasta').value
     if (!desde || !hasta) { statusEl.textContent = 'Elegí ambas fechas ("Desde" y "Hasta").'; return }
     if (desde > hasta) { statusEl.textContent = 'La fecha "Desde" no puede ser posterior a "Hasta".'; return }
     modo = 'rango'
+    chipActivo = null // rango manual -- ningún chip de arriba queda resaltado
     rangoDesde = desde
     rangoHasta = hasta
     markActiveQuick()
@@ -671,6 +704,7 @@ function initApp() {
   document.getElementById('filtroProducto').addEventListener('input', renderRotacion)
   document.getElementById('filtroDepto').addEventListener('change', renderRotacion)
 
+  cargarFechaMinima()
   cargarTendencia()
   cargarSalud()
   cargar()

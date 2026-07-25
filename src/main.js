@@ -12,6 +12,12 @@ const num = (n) => Number(n || 0).toLocaleString('es-CL', { maximumFractionDigit
 const dec = (n, d = 1) => Number(n || 0).toLocaleString('es-CL', { minimumFractionDigits: d, maximumFractionDigits: d })
 const pct = (n) => dec(n, 1) + '%'
 
+const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
+const toISO = (d) => {
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
 function el(html) {
   const t = document.createElement('template')
   t.innerHTML = html.trim()
@@ -81,7 +87,9 @@ const RANGOS_RAPIDOS = [
 ]
 
 let claveActual = 'hoy';
-let modoHistorico = false;
+let modo = 'rapido'; // 'rapido' (5 botones, lee reportes_ventas_actual) | 'rango' (fDesde/fHasta, combina reportes_ventas_historico)
+let rangoDesde = null
+let rangoHasta = null
 let rotacionData = []
 let sortState = { key: 'ingreso', dir: -1 }
 
@@ -91,7 +99,7 @@ function renderQuickRanges() {
   RANGOS_RAPIDOS.forEach((r) => {
     const btn = el(`<button data-clave="${r.clave}">${r.label}</button>`)
     btn.addEventListener('click', () => {
-      modoHistorico = false
+      modo = 'rapido'
       claveActual = r.clave
       markActiveQuick()
       cargar()
@@ -103,7 +111,7 @@ function renderQuickRanges() {
 function markActiveQuick() {
   const box = document.getElementById('quickRanges')
   ;[...box.children].forEach((btn) => {
-    btn.classList.toggle('active', !modoHistorico && btn.dataset.clave === claveActual)
+    btn.classList.toggle('active', modo === 'rapido' && btn.dataset.clave === claveActual)
   })
 }
 
@@ -124,7 +132,7 @@ function compareSub(current, prev, invertColor = false) {
 function renderKpis(data) {
   const box = document.getElementById('kpis')
   box.innerHTML = ''
-  const r = data.resumen, p = data.resumenAnterior
+  const r = data.resumen, p = data.resumenAnterior || {}
   const cards = [
     { label: 'Ventas (ingreso bruto)', value: money(r.total), sub: compareSub(r.total, p.total) },
     { label: 'Costo de mercadería', value: money(r.costo), sub: compareSub(r.costo, p.costo, true) },
@@ -142,6 +150,61 @@ function renderKpis(data) {
       </div>
     `))
   })
+}
+
+// ---------------------------------------------------------------------------
+// Tendencia histórica -- todo reportes_ventas_historico, independiente del
+// periodo seleccionado arriba. Trae solo el resumen de cada día (path JSON
+// de Postgres, ~36KB por día completo si se bajara entero, evitado a
+// propósito) y se carga una sola vez al abrir el sitio.
+// ---------------------------------------------------------------------------
+async function cargarTendencia() {
+  const box = document.getElementById('chartTendencia')
+  const { data, error } = await supabase
+    .from('reportes_ventas_historico')
+    .select('fecha, resumen:datos->resumen')
+    .order('fecha')
+  if (error) { box.innerHTML = `<div class="empty">No se pudo cargar la tendencia: ${error.message}</div>`; return }
+  renderTendencia(data || [])
+}
+
+function renderTendencia(filas) {
+  const box = document.getElementById('chartTendencia')
+  box.innerHTML = ''
+  if (!filas.length) { box.appendChild(el('<div class="empty">Todavía no hay suficiente histórico guardado.</div>')); return }
+  const max = Math.max(...filas.map((f) => (f.resumen || {}).total || 0), 1)
+  filas.forEach((f) => {
+    const r = f.resumen || {}
+    const h = Math.max(2, Math.round(((r.total || 0) / max) * 170))
+    const fecha = new Date(f.fecha + 'T00:00:00')
+    const label = fecha.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' })
+    box.appendChild(el(`
+      <div class="bar-col">
+        <div class="bar-tooltip">${label}: ${money(r.total)} · costo ${money(r.costo)} · ganancia ${money(r.gananciaBruta)} (${r.tickets || 0} tickets)</div>
+        <div class="bar" style="height:${h}px"></div>
+        <div class="bar-label">${label}</div>
+      </div>
+    `))
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Salud del agente -- heartbeat independiente de si alguien pidió un
+// reporte (con el modelo a pedido, reportes_ventas_actual.actualizado_en
+// viejo ya no implica que algo falló). Se revisa una vez al abrir el sitio.
+// ---------------------------------------------------------------------------
+async function cargarSalud() {
+  const box = document.getElementById('agenteBanner')
+  const { data, error } = await supabase.from('agente_estado').select('ultimo_latido').eq('id', 1).maybeSingle()
+  if (error || !data) { box.style.display = 'none'; return }
+  const ultimo = new Date(data.ultimo_latido)
+  const minutos = Math.round((Date.now() - ultimo.getTime()) / 60000)
+  if (minutos > 45) {
+    box.style.display = 'flex'
+    box.innerHTML = `⚠ El agente de la tienda no responde hace ${minutos} min (último aviso: ${ultimo.toLocaleString('es-CL')}). Revisar que la PC de la tienda y el agente sigan encendidos.`
+  } else {
+    box.style.display = 'none'
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -288,6 +351,187 @@ function renderVivoBanner(info) {
 }
 
 // ---------------------------------------------------------------------------
+// Rango personalizado -- combina N días de reportes_ventas_historico
+// client-side. Mismo criterio de clasificación ABC (Pareto 80/95) que ya usa
+// agente-servidor/lib/stats.js::rotacionProductos, portado acá.
+// ---------------------------------------------------------------------------
+function calcularABC(productos) {
+  const totalIngreso = productos.reduce((s, p) => s + p.ingreso, 0)
+  const ordenados = [...productos].sort((a, b) => b.ingreso - a.ingreso)
+  let acumulado = 0
+  return ordenados.map((p) => {
+    acumulado += p.ingreso
+    const pctAcumulado = totalIngreso > 0 ? (acumulado / totalIngreso) * 100 : 0
+    return {
+      ...p,
+      pctDeIngresoTotal: totalIngreso > 0 ? (p.ingreso / totalIngreso) * 100 : 0,
+      clasificacionABC: pctAcumulado <= 80 ? 'A' : pctAcumulado <= 95 ? 'B' : 'C',
+    }
+  })
+}
+
+// dias: [{ fecha, datos }] ascendente por fecha, datos = forma que devuelve
+// stats.dashboard() calculado para ESE día (una fila de reportes_ventas_historico,
+// o la clave 'hoy' de reportes_ventas_actual si el rango incluye hoy).
+// stockBajo y resumenAnterior (comparativo) NO se combinan -- son una foto
+// del momento, sumarlos entre días no tiene sentido; se avisa en rangoBanner.
+function combinarDias(dias) {
+  const n = dias.length
+  if (!n) return null
+
+  let tickets = 0, articulos = 0, subtotal = 0, impuestos = 0, total = 0, costo = 0, gananciaBruta = 0
+  for (const { datos } of dias) {
+    const r = datos.resumen
+    tickets += r.tickets; articulos += r.articulos || 0; subtotal += r.subtotal
+    impuestos += r.impuestos; total += r.total; costo += r.costo; gananciaBruta += r.gananciaBruta
+  }
+  const resumen = {
+    tickets, articulos, subtotal, impuestos, total, costo, gananciaBruta,
+    margenPct: total > 0 ? (gananciaBruta / total) * 100 : 0,
+    ticketPromedio: tickets > 0 ? total / tickets : 0,
+  }
+
+  const ventasDiarias = dias.flatMap((d) => d.datos.ventasDiarias)
+
+  const porCodigo = new Map()
+  for (const { datos } of dias) {
+    for (const p of datos.rotacionProductos) {
+      const cur = porCodigo.get(p.codigo) || { codigo: p.codigo, nombre: p.nombre, departamento: p.departamento, cantidad: 0, ingreso: 0, costo: 0, existencia: null, estimado: false }
+      cur.cantidad += p.cantidad
+      cur.ingreso += p.ingreso
+      cur.costo += p.costo
+      if (p.existencia !== null) cur.existencia = p.existencia // dias viene ascendente: el último no-nulo gana (más reciente)
+      cur.estimado = cur.estimado || p.estimado
+      porCodigo.set(p.codigo, cur)
+    }
+  }
+  let productos = [...porCodigo.values()].map((p) => {
+    const ganancia = p.ingreso - p.costo
+    const velocidadDia = p.cantidad / n
+    return {
+      ...p,
+      gananciaBruta: ganancia,
+      margenPct: p.ingreso > 0 ? (ganancia / p.ingreso) * 100 : 0,
+      velocidadDia,
+      diasDeInventario: p.existencia !== null && p.existencia > -1 && velocidadDia > 0 ? p.existencia / velocidadDia : null,
+    }
+  })
+  productos = calcularABC(productos)
+
+  const porDepto = new Map()
+  for (const { datos } of dias) {
+    for (const d of datos.rotacionPorDepartamento) {
+      const cur = porDepto.get(d.departamento) || { departamento: d.departamento, productosDistintos: 0, cantidad: 0, ingreso: 0, costo: 0 }
+      cur.cantidad += d.cantidad; cur.ingreso += d.ingreso; cur.costo += d.costo
+      cur.productosDistintos = Math.max(cur.productosDistintos, d.productosDistintos)
+      porDepto.set(d.departamento, cur)
+    }
+  }
+  const rotacionPorDepartamento = [...porDepto.values()]
+    .map((d) => { const g = d.ingreso - d.costo; return { ...d, gananciaBruta: g, margenPct: d.ingreso > 0 ? (g / d.ingreso) * 100 : 0 } })
+    .sort((a, b) => b.ingreso - a.ingreso)
+
+  const porForma = new Map()
+  for (const { datos } of dias) {
+    for (const f of datos.formasPago) {
+      const cur = porForma.get(f.forma) || { forma: f.forma, tickets: 0, total: 0 }
+      cur.tickets += f.tickets; cur.total += f.total
+      porForma.set(f.forma, cur)
+    }
+  }
+  const formasPago = [...porForma.values()].sort((a, b) => b.total - a.total)
+
+  const porCajero = new Map()
+  for (const { datos } of dias) {
+    // días guardados antes de la Fase D no tienen este campo todavía
+    for (const c of datos.ventasPorCajero || []) {
+      const cur = porCajero.get(c.cajero) || { cajero: c.cajero, tickets: 0, total: 0, gananciaBruta: 0 }
+      cur.tickets += c.tickets; cur.total += c.total; cur.gananciaBruta += c.gananciaBruta
+      porCajero.set(c.cajero, cur)
+    }
+  }
+  const ventasPorCajero = [...porCajero.values()].sort((a, b) => b.total - a.total)
+
+  const entradasCaja = { total: 0, veces: 0 }, salidasCaja = { total: 0, veces: 0 }, pagosAbonos = { total: 0, veces: 0 }
+  const porCategoria = new Map()
+  for (const { datos } of dias) {
+    const c = datos.flujoCaja
+    entradasCaja.total += c.entradasCaja.total; entradasCaja.veces += c.entradasCaja.veces
+    salidasCaja.total += c.salidasCaja.total; salidasCaja.veces += c.salidasCaja.veces
+    pagosAbonos.total += c.pagosAbonos.total; pagosAbonos.veces += c.pagosAbonos.veces
+    for (const cat of c.salidasPorCategoria) {
+      const cur = porCategoria.get(cat.categoria) || { categoria: cat.categoria, total: 0, veces: 0 }
+      cur.total += cat.total; cur.veces += cat.veces
+      porCategoria.set(cat.categoria, cur)
+    }
+  }
+  const flujoCaja = { entradasCaja, salidasCaja, pagosAbonos, salidasPorCategoria: [...porCategoria.values()].sort((a, b) => b.total - a.total) }
+
+  const ultimoVivo = dias[n - 1].datos.datosEnVivo
+  return {
+    periodo: { desde: dias[0].fecha, hasta: dias[n - 1].fecha },
+    resumen,
+    resumenAnterior: null,
+    datosEnVivo: ultimoVivo && ultimoVivo.activo ? ultimoVivo : { activo: false, ticketsEnVivo: 0, cutoff: null },
+    ventasDiarias,
+    rotacionProductos: productos,
+    rotacionPorDepartamento,
+    formasPago,
+    ventasPorCajero,
+    stockBajo: [],
+    flujoCaja,
+  }
+}
+
+function renderRangoBanner() {
+  const box = document.getElementById('rangoBanner')
+  if (modo !== 'rango') { box.style.display = 'none'; return }
+  box.style.display = 'flex'
+  box.innerHTML = 'ℹ Rango personalizado: se combinan varios días guardados. El comparativo con el periodo anterior y la sección de "Stock bajo" no están disponibles en este modo (son una foto del momento, no se pueden sumar entre días) — usá los rangos rápidos de arriba para verlos.'
+}
+
+async function cargarRango(desdeStr, hastaStr) {
+  const statusEl = document.getElementById('status')
+  statusEl.textContent = 'Cargando rango...'
+
+  const hoyStr = toISO(new Date())
+  const incluyeHoy = desdeStr <= hoyStr && hastaStr >= hoyStr
+  const hastaHistorico = incluyeHoy ? toISO(new Date(startOfDay(new Date(hoyStr + 'T00:00:00')).getTime() - 86400000)) : hastaStr
+
+  let historico = []
+  if (desdeStr <= hastaHistorico) {
+    const { data, error } = await supabase
+      .from('reportes_ventas_historico')
+      .select('fecha, datos')
+      .gte('fecha', desdeStr)
+      .lte('fecha', hastaHistorico)
+      .order('fecha')
+    if (error) { statusEl.textContent = 'Error: ' + error.message; return }
+    historico = data || []
+  }
+
+  let dias = historico
+  if (incluyeHoy) {
+    const { data: hoyRow, error: errHoy } = await supabase
+      .from('reportes_ventas_actual')
+      .select('datos')
+      .eq('clave', 'hoy')
+      .maybeSingle()
+    if (errHoy) { statusEl.textContent = 'Error: ' + errHoy.message; return }
+    // Si el agente lleva un tiempo apagado, la fila 'hoy' puede haber quedado
+    // congelada en un día que ya está en el histórico -- usarla igual (mal
+    // etiquetada como "hoy") duplicaría ese día. Solo se usa si de verdad
+    // corresponde al día de hoy.
+    if (hoyRow && hoyRow.datos.periodo?.hasta === hoyStr) dias = [...historico, { fecha: hoyStr, datos: hoyRow.datos }]
+  }
+
+  if (!dias.length) { statusEl.textContent = 'Sin reportes guardados en ese rango.'; return }
+
+  pintar(combinarDias(dias))
+  statusEl.textContent = `Rango ${desdeStr} a ${hastaStr} — combinando ${dias.length} día(s)`
+}
+
+// ---------------------------------------------------------------------------
 // Carga principal -- lee directo de Supabase, nunca calcula nada acá.
 // ---------------------------------------------------------------------------
 function pintar(datos) {
@@ -313,34 +557,37 @@ function pintar(datos) {
     'Sin ventas en este periodo.'
   )
 
+  renderTable('ventasPorCajero',
+    [{ label: 'Cajero' }, { label: 'Tickets', num: true }, { label: 'Total', num: true }, { label: 'Ganancia', num: true }],
+    datos.ventasPorCajero || [], // reportes ya guardados antes de la Fase D no tienen este campo todavía
+    (r) => `<tr><td>${r.cajero}</td><td class="num">${num(r.tickets)}</td><td class="num">${money(r.total)}</td><td class="num">${money(r.gananciaBruta)}</td></tr>`,
+    'Sin ventas en este periodo.'
+  )
+
   renderCashflow(datos.flujoCaja)
 
-  document.getElementById('stockCount').textContent = datos.stockBajo.length
+  const stockEmptyMsg = modo === 'rango'
+    ? 'No disponible para rangos personalizados (ver aviso arriba).'
+    : 'Ningún producto con stock bajo. 🎉'
+  document.getElementById('stockCount').textContent = modo === 'rango' ? '—' : datos.stockBajo.length
   renderTable('stockBajo',
     [{ label: 'Producto' }, { label: 'Existencia', num: true }, { label: 'Mínimo', num: true }],
     datos.stockBajo,
     (r) => `<tr class="low-stock-row"><td>${r.descripcion}</td><td class="num">${num(r.existencia)}</td><td class="num">${num(r.minimo)}</td></tr>`,
-    'Ningún producto con stock bajo. 🎉'
+    stockEmptyMsg
   )
 }
 
 async function cargar() {
-  const statusEl = document.getElementById('status')
-  statusEl.textContent = 'Cargando...'
+  renderRangoBanner()
 
-  if (modoHistorico) {
-    const fecha = document.getElementById('fDia').value
-    const { data, error } = await supabase
-      .from('reportes_ventas_historico')
-      .select('datos, actualizado_en')
-      .eq('fecha', fecha)
-      .maybeSingle()
-    if (error) { statusEl.textContent = 'Error: ' + error.message; return }
-    if (!data) { statusEl.textContent = 'Sin reporte guardado para ese día.'; return }
-    pintar(data.datos)
-    statusEl.textContent = `Día ${fecha} — actualizado ${new Date(data.actualizado_en).toLocaleString('es-CL')}`
+  if (modo === 'rango') {
+    await cargarRango(rangoDesde, rangoHasta)
     return
   }
+
+  const statusEl = document.getElementById('status')
+  statusEl.textContent = 'Cargando...'
 
   const { data, error } = await supabase
     .from('reportes_ventas_actual')
@@ -361,7 +608,7 @@ async function cargar() {
 // que el agente la procese antes de releer los datos frescos.
 // ---------------------------------------------------------------------------
 async function solicitarActualizacion() {
-  if (modoHistorico) { cargar(); return } // los días pasados ya están cerrados, no hace falta pedir nada
+  if (modo === 'rango') { cargar(); return } // rango personalizado: recombina lo ya guardado, no pide nada al agente
 
   const statusEl = document.getElementById('status')
   const btn = document.getElementById('btnRefresh')
@@ -409,15 +656,23 @@ function initApp() {
   markActiveQuick()
 
   document.getElementById('btnRefresh').addEventListener('click', solicitarActualizacion)
-  document.getElementById('btnVerDia').addEventListener('click', () => {
-    if (!document.getElementById('fDia').value) return
-    modoHistorico = true
+  document.getElementById('btnAplicar').addEventListener('click', () => {
+    const statusEl = document.getElementById('status')
+    const desde = document.getElementById('fDesde').value
+    const hasta = document.getElementById('fHasta').value
+    if (!desde || !hasta) { statusEl.textContent = 'Elegí ambas fechas ("Desde" y "Hasta").'; return }
+    if (desde > hasta) { statusEl.textContent = 'La fecha "Desde" no puede ser posterior a "Hasta".'; return }
+    modo = 'rango'
+    rangoDesde = desde
+    rangoHasta = hasta
     markActiveQuick()
     cargar()
   })
   document.getElementById('filtroProducto').addEventListener('input', renderRotacion)
   document.getElementById('filtroDepto').addEventListener('change', renderRotacion)
 
+  cargarTendencia()
+  cargarSalud()
   cargar()
 }
 

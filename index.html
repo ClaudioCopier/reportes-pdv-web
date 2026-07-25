@@ -33,19 +33,28 @@
   <div class="filterbar">
     <div class="filterbar-quick" id="quickRanges"></div>
     <div class="filterbar-custom">
-      <label>Ver un día pasado <input type="date" id="fDia"></label>
-      <button id="btnVerDia" class="btn btn-secondary">Ver</button>
+      <label>Desde <input type="date" id="fDesde"></label>
+      <label>Hasta <input type="date" id="fHasta"></label>
+      <button id="btnAplicar" class="btn btn-secondary">Aplicar rango</button>
     </div>
   </div>
 
   <main id="app">
+    <div id="agenteBanner" class="alerta-banner" style="display:none"></div>
     <div id="vivoBanner" class="vivo-banner" style="display:none"></div>
+    <div id="rangoBanner" class="rango-banner" style="display:none"></div>
 
     <section class="kpis" id="kpis"></section>
 
     <section class="card">
       <div class="card-header"><h2>Ventas por día — periodo seleccionado</h2></div>
       <div id="chartVentas" class="chart"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-header"><h2>Tendencia histórica — todos los días guardados</h2></div>
+      <p class="hint">Evolución del total vendido por día, de todo el historial disponible (independiente del periodo seleccionado arriba).</p>
+      <div id="chartTendencia" class="chart"></div>
     </section>
 
     <section class="card">
@@ -71,6 +80,11 @@
         <div id="formasPago" class="table-wrap"></div>
       </section>
     </div>
+
+    <section class="card">
+      <div class="card-header"><h2>Ventas por cajero</h2></div>
+      <div id="ventasPorCajero" class="table-wrap"></div>
+    </section>
 
     <section class="card">
       <div class="card-header"><h2>Flujo de caja (movimientos manuales)</h2></div>

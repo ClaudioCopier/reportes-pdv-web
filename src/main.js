@@ -709,6 +709,116 @@ async function cargarFechaMinima() {
 }
 
 // ---------------------------------------------------------------------------
+// Alertas de reposición anticipada -- "qué se va a quedar sin stock pronto,
+// según su ritmo de venta" para todo el catálogo, y qué convendría cargar
+// como inventario mínimo en el POS. Mismo mecanismo de "solicitud +
+// polling" que auditoría de compra, pero recorre el catálogo completo
+// (agente-servidor/lib/alertasReposicion.js) -- tarda ~1 minuto en
+// producción, por eso el timeout es más largo acá que en el resto.
+// ---------------------------------------------------------------------------
+let alertasFilas = []
+
+const ALERTAS_COLS = [
+  { key: 'nombre', label: 'Producto', num: false },
+  { key: 'existenciaActual', label: 'Existencia', num: true, fmt: num },
+  { key: 'diasHastaAgotarse', label: 'Días hasta agotarse', num: true, fmt: (v) => v <= 0 ? 'Agotado' : dec(v, 1) },
+  { key: 'minimoSugerido', label: 'Mínimo sugerido', num: true, fmt: num },
+  { key: 'comprarAhora', label: 'Comprar ahora', num: true, fmt: num },
+  { key: 'costoCompraAhora', label: 'Costo', num: true, fmt: (v, f) => f.pcosto ? money(v) : 'sin costo' },
+]
+
+function renderAlertasTabla() {
+  const box = document.getElementById('alertasTabla')
+  const texto = document.getElementById('filtroAlertas').value.trim().toLowerCase()
+  const filas = alertasFilas.filter((f) => !texto || f.nombre.toLowerCase().includes(texto) || f.codigo.toLowerCase().includes(texto))
+
+  box.innerHTML = ''
+  if (!alertasFilas.length) {
+    box.appendChild(el('<div class="empty">Todavía no se calculó nada -- apretá "Calcular ahora" (tarda ~1 minuto, recorre todo el catálogo).</div>'))
+    return
+  }
+  if (!filas.length) { box.appendChild(el('<div class="empty">Ningún producto coincide con la búsqueda.</div>')); return }
+
+  const thead = ALERTAS_COLS.map((c) => `<th class="${c.num ? 'num' : ''}">${c.label}</th>`).join('')
+  const rows = filas.map((f) => {
+    const cells = ALERTAS_COLS.map((c) => {
+      const raw = f[c.key]
+      const display = c.fmt ? c.fmt(raw, f) : raw
+      const urgente = c.key === 'diasHastaAgotarse' && f.diasHastaAgotarse <= 0 ? ' style="color:var(--alert-error);font-weight:700"' : ''
+      return `<td class="${c.num ? 'num' : ''}"${urgente}>${display}</td>`
+    }).join('')
+    return `<tr>${cells}</tr>`
+  }).join('')
+
+  box.appendChild(el(`<table><thead><tr>${thead}</tr></thead><tbody>${rows}</tbody></table>`))
+}
+
+function pintarAlertas(datos, cuando) {
+  alertasFilas = datos.filas
+  document.getElementById('alertasStatus').textContent = `${datos.filas.length} producto(s) en riesgo (anticipación ${datos.diasAnticipacion} días) -- calculado ${cuando}`
+  renderAlertasTabla()
+}
+
+// Trae el último resultado ya calculado (si hay uno) al abrir el sitio, sin
+// forzar un cálculo nuevo de 1 minuto solo por mirar la página.
+async function cargarUltimaAlerta() {
+  const { data } = await supabase
+    .from('alertas_reposicion_solicitudes')
+    .select('datos, completado_en')
+    .eq('status', 'done')
+    .order('completado_en', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (data && data.datos) {
+    pintarAlertas(data.datos, new Date(data.completado_en).toLocaleString('es-CL'))
+  } else {
+    document.getElementById('alertasStatus').textContent = 'Todavía no se calculó nunca.'
+  }
+}
+
+async function calcularAlertas() {
+  const statusEl = document.getElementById('alertasStatus')
+  const btn = document.getElementById('btnCalcularAlertas')
+  const dias = Number(document.getElementById('alertasDias').value) || 14
+  btn.disabled = true
+  statusEl.textContent = 'Solicitando a la tienda (esto recorre todo el catálogo, puede tardar ~1 minuto)...'
+  try {
+    const { data, error } = await supabase
+      .from('alertas_reposicion_solicitudes')
+      .insert({ dias_anticipacion: dias })
+      .select('id')
+      .single()
+    if (error) { statusEl.textContent = 'Error: ' + error.message; return }
+
+    const inicio = Date.now()
+    const TIMEOUT_MS = 150000
+    while (true) {
+      await new Promise((r) => setTimeout(r, 2000))
+      const { data: row, error: errRow } = await supabase
+        .from('alertas_reposicion_solicitudes')
+        .select('status, mensaje, datos, completado_en')
+        .eq('id', data.id)
+        .maybeSingle()
+      if (errRow) { statusEl.textContent = 'Error: ' + errRow.message; return }
+      if (row?.status === 'done') {
+        pintarAlertas(row.datos, new Date(row.completado_en).toLocaleString('es-CL'))
+        return
+      }
+      if (row?.status === 'error') { statusEl.textContent = 'Error del agente: ' + (row.mensaje || 'sin detalle'); return }
+      if (Date.now() - inicio > TIMEOUT_MS) {
+        statusEl.textContent = 'La tienda no respondió a tiempo (¿está abierto el agente en la PC?).'
+        return
+      }
+      statusEl.textContent = row?.status === 'running'
+        ? 'Calculando en la tienda (recorre todo el catálogo, puede tardar ~1 minuto)...'
+        : 'Esperando que el agente tome la solicitud...'
+    }
+  } finally {
+    btn.disabled = false
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Auditoría de compra por marca.
 // ---------------------------------------------------------------------------
 let auditoriaDatos = null
@@ -974,10 +1084,13 @@ function initApp() {
     internasVisibles = !internasVisibles
     renderCuentasInternas(ultimoDatos && ultimoDatos.cuentasInternas)
   })
+  document.getElementById('btnCalcularAlertas').addEventListener('click', calcularAlertas)
+  document.getElementById('filtroAlertas').addEventListener('input', renderAlertasTabla)
 
   cargarFechaMinima()
   cargarTendencia()
   cargarSalud()
+  cargarUltimaAlerta()
   cargar()
 }
 

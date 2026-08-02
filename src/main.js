@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { renderBarChart, renderLineChart } from './chart.js'
+import { renderBarChart, renderLineChart, renderAuditoriaTendenciaChart } from './chart.js'
 
 // El cliente de Supabase se crea recién después de un login válido: la
 // URL/clave las entrega el servidor (/api/entrar) sólo cuando la clave de
@@ -751,9 +751,14 @@ function cerrarAuditoria() {
   document.getElementById('auditoriaOverlay').style.display = 'none'
 }
 
+// Tabla técnica completa (detrás de "Ver detalle técnico completo") -- todos
+// los números crudos, para quien quiera auditar el cálculo. El resumen
+// ejecutivo de arriba (KPIs, gráfico, "Qué comprar") es lo pensado para la
+// jefa, que no necesita leer esto para decidir.
 const AUDITORIA_COLS = [
   { key: 'nombre', label: 'Producto', num: false },
   { key: 'existenciaActual', label: 'Existencia', num: true, fmt: (v) => v === null ? '—' : num(v) },
+  { key: 'calzaConActual', label: 'Inventario confiable', num: false, fmt: (v) => v === null ? '—' : (v ? 'Sí' : 'No') },
   { key: 'cantidadVendida90d', label: 'Vend. 90d', num: true, fmt: num },
   { key: 'diasEnCero', label: 'Días $0', num: true, fmt: (v) => dec(v, 1) },
   { key: 'ventaAjustadaMes', label: 'Vta/mes*', num: true, fmt: (v) => v === null ? '—' : dec(v, 2) },
@@ -767,11 +772,8 @@ function renderAuditoriaTabla(filas) {
   box.innerHTML = ''
   if (!filas.length) { box.appendChild(el('<div class="empty">Sin productos para ese patrón.</div>')); return }
 
-  const conDatos = filas.filter((f) => !f.sinDatosSuficientes)
-  const sinDatos = filas.filter((f) => f.sinDatosSuficientes)
-
   const thead = AUDITORIA_COLS.map((c) => `<th class="${c.num ? 'num' : ''}">${c.label}</th>`).join('') + '<th>Mensual (3×30d)</th>'
-  const rows = conDatos.map((f) => {
+  const rows = filas.map((f) => {
     const cells = AUDITORIA_COLS.map((c) => {
       const raw = f[c.key]
       const display = c.fmt ? c.fmt(raw) : raw
@@ -784,22 +786,137 @@ function renderAuditoriaTabla(filas) {
     return `<tr>${cells}<td class="mensual-cell">${mensual}</td></tr>`
   }).join('')
 
-  const table = el(`<table><thead><tr>${thead}</tr></thead><tbody>${rows}</tbody></table>`)
-  box.appendChild(table)
+  box.appendChild(el(`<table><thead><tr>${thead}</tr></thead><tbody>${rows}</tbody></table>`))
+}
 
-  if (sinDatos.length) {
-    box.appendChild(el(`<div class="hint">Sin datos suficientes para proyectar (decidir a mano): ${sinDatos.map((f) => f.nombre).join(', ')}.</div>`))
+// Nombre de mes para el eje del gráfico agregado -- calculado desde el punto
+// medio del bucket (no "desde" ni "hasta") para que un bucket que cruza dos
+// meses calendario quede etiquetado con el que más pesa.
+function mesBucketLabel(desdeStr, hastaStr) {
+  const d1 = new Date(desdeStr + 'T00:00:00')
+  const d2 = new Date(hastaStr + 'T00:00:00')
+  const mid = new Date((d1.getTime() + d2.getTime()) / 2)
+  const s = mid.toLocaleDateString('es-CL', { month: 'long' })
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+// Suma, bucket a bucket, la cantidad realmente vendida (no la ajustada por
+// stockout -- más fácil de explicarle a alguien sin experiencia en el
+// cálculo) de TODOS los productos de la marca. Devuelve los 3 buckets ya
+// con % de cambio contra el anterior, más un titular en palabras simples
+// (no un gráfico) para el caso "creció"/"bajó"/"recién empezó a venderse".
+function calcularTendenciaAgregada(filas) {
+  if (!filas.length || !filas[0].mensual || !filas[0].mensual.length) return { buckets: [], headline: null }
+
+  const nBuckets = filas[0].mensual.length
+  const buckets = []
+  for (let i = 0; i < nBuckets; i++) {
+    const desde = filas[0].mensual[i].desde
+    const hasta = filas[0].mensual[i].hasta
+    const cantidad = filas.reduce((s, f) => s + ((f.mensual[i] && f.mensual[i].cantidadVendida) || 0), 0)
+    buckets.push({ desde, hasta, cantidad })
   }
+  for (let i = 1; i < buckets.length; i++) {
+    const actual = buckets[i].cantidad, anterior = buckets[i - 1].cantidad
+    buckets[i].crecimientoPct = anterior === 0 ? null : +(((actual - anterior) / anterior) * 100).toFixed(1)
+  }
+
+  const primero = buckets[0].cantidad, ultimo = buckets[buckets.length - 1].cantidad
+  let headline
+  if (primero > 0) {
+    const pct = ((ultimo - primero) / primero) * 100
+    headline = {
+      texto: `${pct >= 0 ? '▲ +' : '▼ '}${dec(Math.abs(pct), 1)}% vs. hace ${nBuckets - 1} mes(es)`,
+      clase: pct >= 0 ? 'kpi-up' : 'kpi-down',
+    }
+  } else if (ultimo > 0) {
+    headline = { texto: '▲ Empezó a venderse en el último mes', clase: 'kpi-up' }
+  } else {
+    headline = { texto: 'Sin ventas en los últimos 90 días', clase: '' }
+  }
+  return { buckets, headline }
+}
+
+function renderAuditoriaKpis(datos) {
+  const box = document.getElementById('auditoriaKpis')
+  box.innerHTML = ''
+  const comprables = datos.filas.filter((f) => !f.sinDatosSuficientes && f.comprar > 0)
+  const totalUnidades = comprables.reduce((s, f) => s + f.comprar, 0)
+  const totalCosto = comprables.reduce((s, f) => s + f.costoCompra, 0)
+  const revisar = datos.filas.filter((f) => f.sinDatosSuficientes || f.calzaConActual === false)
+  const cards = [
+    { label: 'Productos analizados', value: num(datos.filas.length) },
+    { label: 'Unidades a comprar', value: num(totalUnidades) },
+    { label: 'Inversión estimada', value: money(totalCosto) },
+    { label: 'A revisar a mano', value: num(revisar.length) },
+  ]
+  cards.forEach((c) => box.appendChild(el(`<div class="kpi-card"><div class="kpi-label">${c.label}</div><div class="kpi-value">${c.value}</div></div>`)))
+}
+
+// Compara el último bucket mensual contra el anterior (mismo dato que ya
+// calcula agente-servidor/lib/auditoriaCompra.js) para una etiqueta simple
+// en vez de obligar a leer el número -- ±5% se considera "estable" para no
+// marcar como tendencia el ruido normal de venta día a día.
+function tendenciaBadge(f) {
+  const mensual = f.mensual || []
+  const last = mensual[mensual.length - 1]
+  const pct = last ? last.crecimientoPct : null
+  if (pct === null || pct === undefined) return `<span class="tendencia-badge flat">— Sin datos</span>`
+  if (pct > 5) return `<span class="tendencia-badge up">▲ +${dec(pct, 1)}%</span>`
+  if (pct < -5) return `<span class="tendencia-badge down">▼ ${dec(pct, 1)}%</span>`
+  return `<span class="tendencia-badge flat">→ Estable</span>`
+}
+
+function renderAuditoriaComprarLista(filas) {
+  const comprables = filas.filter((f) => !f.sinDatosSuficientes && f.comprar > 0).sort((a, b) => b.comprar - a.comprar)
+  renderTable('auditoriaComprarLista',
+    [{ label: 'Producto' }, { label: 'Tendencia (últ. mes)' }, { label: 'Comprar', num: true }, { label: 'Costo', num: true }],
+    comprables,
+    (f) => `<tr><td>${f.nombre}</td><td>${tendenciaBadge(f)}</td><td class="num"><b>${num(f.comprar)}</b></td><td class="num">${f.pcosto ? money(f.costoCompra) : 'sin costo'}</td></tr>`,
+    'No hace falta comprar nada de esta marca por ahora — el stock actual alcanza para el periodo pedido. 🎉'
+  )
+}
+
+function motivoRevision(f) {
+  if (f.calzaConActual === false) return 'El inventario registrado no coincide con la existencia actual — no confiar en el cálculo, revisar a mano.'
+  return `${num(f.cantidadVendida90d)} vendidas en 90 días, ${dec(f.diasEnCero, 1)} días sin stock — no hay suficiente información para proyectar.`
+}
+
+function renderAuditoriaRevision(filas) {
+  const card = document.getElementById('auditoriaRevisionCard')
+  const problematicos = filas.filter((f) => f.sinDatosSuficientes || f.calzaConActual === false)
+  if (!problematicos.length) { card.style.display = 'none'; return }
+  card.style.display = ''
+  const lista = document.getElementById('auditoriaRevisionLista')
+  lista.innerHTML = ''
+  problematicos.forEach((f) => lista.appendChild(el(`<li><b>${f.nombre}</b> — ${motivoRevision(f)}</li>`)))
+}
+
+let auditoriaDetalleVisible = false
+function toggleAuditoriaDetalle() {
+  auditoriaDetalleVisible = !auditoriaDetalleVisible
+  document.getElementById('auditoriaTabla').style.display = auditoriaDetalleVisible ? '' : 'none'
+  document.getElementById('btnToggleAuditoriaDetalle').textContent = auditoriaDetalleVisible ? 'Ocultar detalle técnico' : 'Ver detalle técnico completo'
 }
 
 function pintarAuditoria(datos) {
-  const box = document.getElementById('auditoriaResultado')
-  box.style.display = ''
-  const conDatos = datos.filas.filter((f) => !f.sinDatosSuficientes)
-  const totalUnidades = conDatos.reduce((s, f) => s + f.comprar, 0)
-  const totalCosto = conDatos.reduce((s, f) => s + f.costoCompra, 0)
-  document.getElementById('auditoriaTotalUnidades').textContent = num(totalUnidades)
-  document.getElementById('auditoriaTotalCosto').textContent = money(totalCosto)
+  document.getElementById('auditoriaResultado').style.display = ''
+
+  auditoriaDetalleVisible = false
+  document.getElementById('auditoriaTabla').style.display = 'none'
+  document.getElementById('btnToggleAuditoriaDetalle').textContent = 'Ver detalle técnico completo'
+
+  renderAuditoriaKpis(datos)
+
+  const { buckets, headline } = calcularTendenciaAgregada(datos.filas)
+  const headlineEl = document.getElementById('auditoriaTendenciaHeadline')
+  headlineEl.textContent = headline ? headline.texto : ''
+  headlineEl.className = 'tendencia-headline' + (headline && headline.clase ? ' ' + headline.clase : '')
+  const bucketsConLabel = buckets.map((b) => ({ ...b, label: mesBucketLabel(b.desde, b.hasta), rango: `${b.desde} a ${b.hasta}` }))
+  renderAuditoriaTendenciaChart(document.getElementById('auditoriaChartTendencia'), bucketsConLabel, { num })
+
+  renderAuditoriaComprarLista(datos.filas)
+  renderAuditoriaRevision(datos.filas)
   renderAuditoriaTabla(datos.filas)
 }
 
@@ -885,6 +1002,7 @@ function initApp() {
   })
   document.getElementById('auditoriaForm').addEventListener('submit', generarAuditoria)
   document.getElementById('btnExportarAuditoria').addEventListener('click', exportarAuditoria)
+  document.getElementById('btnToggleAuditoriaDetalle').addEventListener('click', toggleAuditoriaDetalle)
   document.getElementById('rangoForm').addEventListener('submit', (e) => {
     e.preventDefault()
     const statusEl = document.getElementById('status')

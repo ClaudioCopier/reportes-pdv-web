@@ -374,14 +374,35 @@ td.num, th.num { text-align: right; }
 .auditoria-form input#auditoriaPatron { width: 220px; }
 .auditoria-form input[type="number"] { width: 100px; }
 
-.auditoria-resumen {
-  display: flex;
-  align-items: center;
-  gap: 22px;
-  padding: 12px 0;
-  flex-wrap: wrap;
-}
-.auditoria-resumen-item { display: flex; flex-direction: column; gap: 2px; }
-.auditoria-resumen-item span { font-size: 11px; color: var(--muted); }
-.auditoria-resumen-item b { font-size: 18px; color: var(--green-dark); }
 .mensual-cell { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+.tendencia-headline { font-size: 14px; font-weight: 700; color: var(--muted); }
+.tendencia-headline.kpi-up { color: var(--green); }
+.tendencia-headline.kpi-down { color: var(--red); }
+
+.tendencia-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.tendencia-badge.up { background: var(--green-light); color: var(--green-dark); }
+.tendencia-badge.down { background: #fdecec; color: var(--red); }
+.tendencia-badge.flat { background: var(--bg); color: var(--muted); }
+
+.auditoria-revision-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+.auditoria-revision-lista li { color: var(--text); }
+
+.auditoria-detalle-btn { margin: 4px 0 14px; display: block; }

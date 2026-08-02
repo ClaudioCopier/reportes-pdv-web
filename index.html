@@ -136,12 +136,34 @@
     </form>
     <p id="auditoriaStatus" class="hint"></p>
     <div id="auditoriaResultado" style="display:none">
-      <div class="auditoria-resumen">
-        <div class="auditoria-resumen-item"><span>Total a comprar</span><b id="auditoriaTotalUnidades"></b></div>
-        <div class="auditoria-resumen-item"><span>Costo total</span><b id="auditoriaTotalCosto"></b></div>
-        <button id="btnExportarAuditoria" type="button" class="btn btn-secondary">Exportar a Excel</button>
-      </div>
-      <div id="auditoriaTabla" class="table-wrap scroll-y-big"></div>
+      <div class="kpis" id="auditoriaKpis"></div>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>Cómo se movió la marca</h2>
+          <span id="auditoriaTendenciaHeadline" class="tendencia-headline"></span>
+        </div>
+        <p class="hint">Unidades realmente vendidas de esta marca, mes a mes, dentro de los últimos 90 días — para ver si la demanda viene subiendo o bajando antes de decidir cuánto pedir.</p>
+        <div id="auditoriaChartTendencia" class="chart"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>Qué comprar</h2>
+          <button id="btnExportarAuditoria" type="button" class="btn btn-secondary">Exportar a Excel</button>
+        </div>
+        <p class="hint">Ordenado de mayor a menor cantidad a comprar. "Tendencia" compara el último mes contra el anterior.</p>
+        <div id="auditoriaComprarLista" class="table-wrap"></div>
+      </section>
+
+      <section class="card" id="auditoriaRevisionCard" style="display:none">
+        <div class="card-header"><h2>Revisar a mano</h2></div>
+        <p class="hint">Estos productos no se pudieron proyectar con confianza (poca venta, mucho tiempo sin stock, o el inventario registrado no coincide con la existencia actual) — la decisión queda para vos, no un número automático.</p>
+        <ul id="auditoriaRevisionLista" class="auditoria-revision-lista"></ul>
+      </section>
+
+      <button id="btnToggleAuditoriaDetalle" type="button" class="btn btn-outline auditoria-detalle-btn">Ver detalle técnico completo</button>
+      <div id="auditoriaTabla" class="table-wrap scroll-y-big" style="display:none"></div>
     </div>
   </div>
 </div>

@@ -300,3 +300,81 @@ export function renderLineChart(container, filas, { money, num }) {
   hitRect.addEventListener('pointerdown', onMove)
   hitRect.addEventListener('pointerleave', onLeave)
 }
+
+// ---------------------------------------------------------------------------
+// Auditoría de compra -- tendencia agregada de una marca, 3 barras (una por
+// bucket de 30 días que ya arma agente-servidor/lib/auditoriaCompra.js).
+// Solo 3 categorías: no hace falta decimar el eje X como en renderBarChart.
+// Pensado para una jefa sin experiencia en código: eje en unidades reales
+// vendidas (no la venta "ajustada" por stockout, más difícil de explicar),
+// con el % de cambio contra el mes anterior en el tooltip.
+// ---------------------------------------------------------------------------
+export function renderAuditoriaTendenciaChart(container, buckets, { num }) {
+  container.innerHTML = ''
+  if (!buckets || !buckets.length) { container.appendChild(elEmpty('Sin datos para graficar.')); return }
+
+  const wrap = document.createElement('div')
+  wrap.className = 'chart-wrap'
+  container.appendChild(wrap)
+
+  const width = Math.max(320, wrap.clientWidth || container.clientWidth || 600)
+  const height = 220
+  const margin = { top: 16, right: 12, bottom: 34, left: 56 }
+  const plotW = width - margin.left - margin.right
+  const plotH = height - margin.top - margin.bottom
+
+  const maxVal = Math.max(...buckets.map((b) => b.cantidad), 1)
+  const { ticks, top } = niceTicks(maxVal)
+
+  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: 'xMinYMin meet', role: 'img', 'aria-label': 'Unidades vendidas por mes' })
+  ejes(svg, { margin, width, height, plotW, plotH, ticks, top, money: num })
+
+  const n = buckets.length
+  const bandW = plotW / n
+  const barW = Math.min(90, bandW * 0.5)
+
+  const barsGroup = svgEl('g')
+  buckets.forEach((b, i) => {
+    const cx = margin.left + bandW * i + bandW / 2
+    const barH = Math.max(2, (b.cantidad / top) * plotH)
+    const barY = margin.top + plotH - barH
+    const path = svgEl('path', {
+      d: roundedTopBarPath(cx - barW / 2, barY, barW, barH, 4),
+      class: 'chart-bar', tabindex: '0', role: 'img',
+      'aria-label': `${b.label}: ${num(b.cantidad)} unidades`,
+    })
+    barsGroup.appendChild(path)
+  })
+  svg.appendChild(barsGroup)
+
+  buckets.forEach((b, i) => {
+    const cx = margin.left + bandW * i + bandW / 2
+    const label = svgEl('text', { x: cx, y: height - margin.bottom + 18, class: 'chart-axis-label', 'text-anchor': 'middle' })
+    label.textContent = b.label
+    svg.appendChild(label)
+  })
+
+  wrap.appendChild(svg)
+  const tooltip = makeTooltip(wrap, svg, width, height)
+
+  barsGroup.querySelectorAll('path').forEach((bar, i) => {
+    const b = buckets[i]
+    const cx = margin.left + bandW * i + bandW / 2
+    const barH = Math.max(2, (b.cantidad / top) * plotH)
+    const barY = margin.top + plotH - barH
+    const mostrar = () => {
+      bar.classList.add('chart-bar-hover')
+      const rows = [[b.rango, '', true], ['Unidades vendidas', num(b.cantidad)]]
+      if (b.crecimientoPct !== null && b.crecimientoPct !== undefined) {
+        rows.push(['Vs. mes anterior', (b.crecimientoPct >= 0 ? '+' : '') + b.crecimientoPct.toFixed(1) + '%'])
+      }
+      tooltip.show(rows, cx, barY)
+    }
+    const ocultar = () => { bar.classList.remove('chart-bar-hover'); tooltip.hide() }
+    bar.addEventListener('pointerenter', mostrar)
+    bar.addEventListener('pointermove', mostrar)
+    bar.addEventListener('pointerleave', ocultar)
+    bar.addEventListener('focus', mostrar)
+    bar.addEventListener('blur', ocultar)
+  })
+}

@@ -807,10 +807,15 @@ async function generarAuditoria(e) {
   e.preventDefault()
   const statusEl = document.getElementById('auditoriaStatus')
   const btn = e.target.querySelector('button[type="submit"]')
-  const patron = document.getElementById('auditoriaPatron').value.trim()
+  const patronInput = document.getElementById('auditoriaPatron').value.trim()
   const meses = Number(document.getElementById('auditoriaMeses').value) || 1
   const crecimiento = Number(document.getElementById('auditoriaCrecimiento').value)
-  if (!patron) { statusEl.textContent = 'Ingresá una marca o patrón (ej. "FYE%").'; return }
+  if (!patronInput) { statusEl.textContent = 'Ingresá una marca o patrón (ej. "FYE").'; return }
+  // Mismo criterio que inventario-app (WorkerPage.jsx: ilike(prefijo + '%')):
+  // el usuario solo escribe el prefijo de la marca, el '%' se agrega solo si
+  // no lo puso ya -- lib/auditoriaCompra.js espera el patrón completo (LIKE
+  // exacto, sin wildcard implícito, para que el CLI siga funcionando igual).
+  const patron = patronInput.includes('%') ? patronInput : patronInput + '%'
 
   btn.disabled = true
   document.getElementById('auditoriaResultado').style.display = 'none'

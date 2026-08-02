@@ -121,10 +121,10 @@
       <h2>Auditoría de compra</h2>
       <button id="btnCerrarAuditoria" class="btn-close" aria-label="Cerrar" type="button">✕</button>
     </div>
-    <p class="hint">Ventas reales de los últimos 90 días, ajustadas por los días que cada producto estuvo en $0 stock, proyectadas a los meses de cobertura pedidos — para decidir cuánto comprar antes de aprobar un pedido a un proveedor. El patrón busca en código y descripción (ej. <code>FYE%</code>).</p>
+    <p class="hint">Ventas reales de los últimos 90 días, ajustadas por los días que cada producto estuvo en $0 stock, proyectadas a los meses de cobertura pedidos — para decidir cuánto comprar antes de aprobar un pedido a un proveedor. Busca en código y descripción (ej. <code>FYE</code> encuentra "FYE GOTAS ZEN", "FYE DEFENSAS", etc.).</p>
     <form id="auditoriaForm" class="auditoria-form">
       <label>Marca o patrón
-        <input type="text" id="auditoriaPatron" placeholder='Ej: FYE%' autocomplete="off">
+        <input type="text" id="auditoriaPatron" placeholder='Ej: FYE' autocomplete="off">
       </label>
       <label>Meses de cobertura
         <input type="number" id="auditoriaMeses" value="1" min="1" step="1">

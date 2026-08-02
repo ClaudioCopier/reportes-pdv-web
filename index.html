@@ -26,6 +26,7 @@
     </div>
     <div class="topbar-actions">
       <span id="status" class="status">Cargando...</span>
+      <button id="btnAuditoria" class="btn btn-outline">Auditoría de compra</button>
       <button id="btnRefresh" class="btn btn-primary">Actualizar ahora</button>
     </div>
   </header>
@@ -101,7 +102,48 @@
       </div>
       <div id="stockBajo" class="table-wrap scroll-y"></div>
     </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Cuentas internas</h2>
+        <button id="btnToggleInternas" class="btn btn-outline">Ver detalle</button>
+      </div>
+      <p class="hint">Ventas con forma de pago "Crédito" — en esta tienda son cuentas internas (retiro de vencidos, venta a precio costo a familiares, la cuenta del jefe para sacar mercadería), no ventas reales. Ya están excluidas de todos los totales de arriba. Esto es solo para fiscalizar de vez en cuando que nadie las use de más — no es parte del uso diario.</p>
+      <div id="cuentasInternasResumen" class="table-wrap" style="display:none"></div>
+      <div id="cuentasInternasDetalle" class="table-wrap scroll-y-big" style="display:none"></div>
+    </section>
   </main>
+</div>
+
+<div id="auditoriaOverlay" class="auditoria-overlay" style="display:none">
+  <div class="auditoria-panel">
+    <div class="auditoria-panel-header">
+      <h2>Auditoría de compra</h2>
+      <button id="btnCerrarAuditoria" class="btn-close" aria-label="Cerrar" type="button">✕</button>
+    </div>
+    <p class="hint">Ventas reales de los últimos 90 días, ajustadas por los días que cada producto estuvo en $0 stock, proyectadas a los meses de cobertura pedidos — para decidir cuánto comprar antes de aprobar un pedido a un proveedor. El patrón busca en código y descripción (ej. <code>FYE%</code>).</p>
+    <form id="auditoriaForm" class="auditoria-form">
+      <label>Marca o patrón
+        <input type="text" id="auditoriaPatron" placeholder='Ej: FYE%' autocomplete="off">
+      </label>
+      <label>Meses de cobertura
+        <input type="number" id="auditoriaMeses" value="1" min="1" step="1">
+      </label>
+      <label>% de crecimiento
+        <input type="number" id="auditoriaCrecimiento" value="10" min="0" step="1">
+      </label>
+      <button type="submit" class="btn btn-primary">Generar</button>
+    </form>
+    <p id="auditoriaStatus" class="hint"></p>
+    <div id="auditoriaResultado" style="display:none">
+      <div class="auditoria-resumen">
+        <div class="auditoria-resumen-item"><span>Total a comprar</span><b id="auditoriaTotalUnidades"></b></div>
+        <div class="auditoria-resumen-item"><span>Costo total</span><b id="auditoriaTotalCosto"></b></div>
+        <button id="btnExportarAuditoria" type="button" class="btn btn-secondary">Exportar a Excel</button>
+      </div>
+      <div id="auditoriaTabla" class="table-wrap scroll-y-big"></div>
+    </div>
+  </div>
 </div>
 
 <script type="module" src="/src/main.js"></script>

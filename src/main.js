@@ -335,6 +335,44 @@ function renderCashflow(caja) {
 }
 
 // ---------------------------------------------------------------------------
+// Cuentas internas (forma_pago "Crédito" -- retiro de vencidos, venta a
+// precio costo a familiares, la cuenta del jefe) -- ver stats.js::
+// cuentasInternas(). Oculto detrás de un botón a propósito (no es para
+// mirar todos los días, solo para fiscalizar de vez en cuando).
+// ---------------------------------------------------------------------------
+let internasVisibles = false
+
+function renderCuentasInternas(internas) {
+  const btn = document.getElementById('btnToggleInternas')
+  const boxResumen = document.getElementById('cuentasInternasResumen')
+  const boxDetalle = document.getElementById('cuentasInternasDetalle')
+
+  const datos = internas || { movimientos: [], porCuenta: [], total: 0 }
+  btn.textContent = `${internasVisibles ? 'Ocultar' : 'Ver detalle'} (${datos.movimientos.length}, ${money(datos.total)})`
+
+  boxResumen.style.display = internasVisibles ? '' : 'none'
+  boxDetalle.style.display = internasVisibles ? '' : 'none'
+  if (!internasVisibles) return
+
+  renderTable('cuentasInternasResumen',
+    [{ label: 'Cuenta' }, { label: 'Movimientos', num: true }, { label: 'Total', num: true }],
+    datos.porCuenta,
+    (r) => `<tr><td>${r.cuenta}</td><td class="num">${num(r.tickets)}</td><td class="num">${money(r.total)}</td></tr>`,
+    'Sin movimientos en este periodo.'
+  )
+
+  renderTable('cuentasInternasDetalle',
+    [{ label: 'Fecha' }, { label: 'Cuenta' }, { label: 'Cajero' }, { label: 'Artículos' }, { label: 'Total', num: true }],
+    datos.movimientos,
+    (m) => {
+      const arts = (m.articulos || []).map((a) => `${a.nombre || a.codigo} ×${dec(a.cantidad, 2)}`).join(', ') || '—'
+      return `<tr><td>${new Date(m.vendidoEn).toLocaleString('es-CL')}</td><td>${m.cuenta}</td><td>${m.cajero}</td><td>${arts}</td><td class="num">${money(m.total)}</td></tr>`
+    },
+    'Sin movimientos en este periodo.'
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Aviso de datos en vivo (hoy, reconstruidos del log del POS)
 // ---------------------------------------------------------------------------
 function renderVivoBanner(info) {
@@ -462,6 +500,20 @@ function combinarDias(dias) {
   }
   const flujoCaja = { entradasCaja, salidasCaja, pagosAbonos, salidasPorCategoria: [...porCategoria.values()].sort((a, b) => b.total - a.total) }
 
+  // días guardados antes de esta sección no tienen datos.cuentasInternas todavía
+  const movimientosInternas = dias.flatMap((d) => (d.datos.cuentasInternas || {}).movimientos || [])
+  const porCuentaInternas = new Map()
+  for (const m of movimientosInternas) {
+    const cur = porCuentaInternas.get(m.cuenta) || { cuenta: m.cuenta, tickets: 0, total: 0 }
+    cur.tickets += 1; cur.total += m.total
+    porCuentaInternas.set(m.cuenta, cur)
+  }
+  const cuentasInternas = {
+    movimientos: movimientosInternas.sort((a, b) => new Date(b.vendidoEn) - new Date(a.vendidoEn)),
+    porCuenta: [...porCuentaInternas.values()].sort((a, b) => b.total - a.total),
+    total: movimientosInternas.reduce((s, m) => s + m.total, 0),
+  }
+
   const ultimoVivo = dias[n - 1].datos.datosEnVivo
   return {
     periodo: { desde: dias[0].fecha, hasta: dias[n - 1].fecha },
@@ -475,6 +527,7 @@ function combinarDias(dias) {
     ventasPorCajero,
     stockBajo: [],
     flujoCaja,
+    cuentasInternas,
   }
 }
 
@@ -548,7 +601,10 @@ async function cargarRango(desdeStr, hastaStr) {
 // ---------------------------------------------------------------------------
 // Carga principal -- lee directo de Supabase, nunca calcula nada acá.
 // ---------------------------------------------------------------------------
+let ultimoDatos = null
+
 function pintar(datos) {
+  ultimoDatos = datos
   renderVivoBanner(datos.datosEnVivo)
   renderKpis(datos)
   renderBarChart(document.getElementById('chartVentas'), datos.ventasDiarias, { money, num })
@@ -579,6 +635,7 @@ function pintar(datos) {
   )
 
   renderCashflow(datos.flujoCaja)
+  renderCuentasInternas(datos.cuentasInternas)
 
   const stockEmptyMsg = modo === 'rango'
     ? 'No disponible para rangos personalizados (ver aviso arriba).'
@@ -680,6 +737,135 @@ async function cargarFechaMinima() {
 }
 
 // ---------------------------------------------------------------------------
+// Auditoría de compra por marca -- panel aparte, no combina con nada del
+// dashboard principal. Botón dispara agente-servidor (lib/auditoriaCompra.js)
+// vía auditoria_solicitudes, mismo mecanismo de "solicitud + polling" que ya
+// usa solicitarActualizacion(). Ver SERVIDOR.md.
+// ---------------------------------------------------------------------------
+let auditoriaDatos = null
+
+function abrirAuditoria() {
+  document.getElementById('auditoriaOverlay').style.display = 'flex'
+}
+function cerrarAuditoria() {
+  document.getElementById('auditoriaOverlay').style.display = 'none'
+}
+
+const AUDITORIA_COLS = [
+  { key: 'nombre', label: 'Producto', num: false },
+  { key: 'existenciaActual', label: 'Existencia', num: true, fmt: (v) => v === null ? '—' : num(v) },
+  { key: 'cantidadVendida90d', label: 'Vend. 90d', num: true, fmt: num },
+  { key: 'diasEnCero', label: 'Días $0', num: true, fmt: (v) => dec(v, 1) },
+  { key: 'ventaAjustadaMes', label: 'Vta/mes*', num: true, fmt: (v) => v === null ? '—' : dec(v, 2) },
+  { key: 'objetivo', label: 'Objetivo', num: true, fmt: (v) => v === null ? '—' : num(v) },
+  { key: 'comprar', label: 'Comprar', num: true, fmt: (v) => v === null ? '—' : num(v) },
+  { key: 'costoCompra', label: 'Costo', num: true, fmt: (v) => v === null ? '—' : money(v) },
+]
+
+function renderAuditoriaTabla(filas) {
+  const box = document.getElementById('auditoriaTabla')
+  box.innerHTML = ''
+  if (!filas.length) { box.appendChild(el('<div class="empty">Sin productos para ese patrón.</div>')); return }
+
+  const conDatos = filas.filter((f) => !f.sinDatosSuficientes)
+  const sinDatos = filas.filter((f) => f.sinDatosSuficientes)
+
+  const thead = AUDITORIA_COLS.map((c) => `<th class="${c.num ? 'num' : ''}">${c.label}</th>`).join('') + '<th>Mensual (3×30d)</th>'
+  const rows = conDatos.map((f) => {
+    const cells = AUDITORIA_COLS.map((c) => {
+      const raw = f[c.key]
+      const display = c.fmt ? c.fmt(raw) : raw
+      return `<td class="${c.num ? 'num' : ''}">${display}</td>`
+    }).join('')
+    const mensual = (f.mensual || []).map((m) => {
+      const g = m.crecimientoPct === null ? '' : ` (${m.crecimientoPct >= 0 ? '▲' : '▼'}${dec(Math.abs(m.crecimientoPct), 1)}%)`
+      return `${m.desde.slice(5)}: ${num(m.cantidadVendida)}${g}`
+    }).join(' · ')
+    return `<tr>${cells}<td class="mensual-cell">${mensual}</td></tr>`
+  }).join('')
+
+  const table = el(`<table><thead><tr>${thead}</tr></thead><tbody>${rows}</tbody></table>`)
+  box.appendChild(table)
+
+  if (sinDatos.length) {
+    box.appendChild(el(`<div class="hint">Sin datos suficientes para proyectar (decidir a mano): ${sinDatos.map((f) => f.nombre).join(', ')}.</div>`))
+  }
+}
+
+function pintarAuditoria(datos) {
+  const box = document.getElementById('auditoriaResultado')
+  box.style.display = ''
+  const conDatos = datos.filas.filter((f) => !f.sinDatosSuficientes)
+  const totalUnidades = conDatos.reduce((s, f) => s + f.comprar, 0)
+  const totalCosto = conDatos.reduce((s, f) => s + f.costoCompra, 0)
+  document.getElementById('auditoriaTotalUnidades').textContent = num(totalUnidades)
+  document.getElementById('auditoriaTotalCosto').textContent = money(totalCosto)
+  renderAuditoriaTabla(datos.filas)
+}
+
+async function generarAuditoria(e) {
+  e.preventDefault()
+  const statusEl = document.getElementById('auditoriaStatus')
+  const btn = e.target.querySelector('button[type="submit"]')
+  const patron = document.getElementById('auditoriaPatron').value.trim()
+  const meses = Number(document.getElementById('auditoriaMeses').value) || 1
+  const crecimiento = Number(document.getElementById('auditoriaCrecimiento').value)
+  if (!patron) { statusEl.textContent = 'Ingresá una marca o patrón (ej. "FYE%").'; return }
+
+  btn.disabled = true
+  document.getElementById('auditoriaResultado').style.display = 'none'
+  statusEl.textContent = 'Solicitando a la tienda...'
+  try {
+    const { data, error } = await supabase
+      .from('auditoria_solicitudes')
+      .insert({ patron, meses, crecimiento_pct: crecimiento })
+      .select('id')
+      .single()
+    if (error) { statusEl.textContent = 'Error: ' + error.message; return }
+
+    const inicio = Date.now()
+    const TIMEOUT_MS = 100000
+    while (true) {
+      await new Promise((r) => setTimeout(r, 1500))
+      const { data: row, error: errRow } = await supabase
+        .from('auditoria_solicitudes')
+        .select('status, mensaje, datos')
+        .eq('id', data.id)
+        .maybeSingle()
+      if (errRow) { statusEl.textContent = 'Error: ' + errRow.message; return }
+      if (row?.status === 'done') {
+        auditoriaDatos = { ...row.datos, patron }
+        pintarAuditoria(auditoriaDatos)
+        statusEl.textContent = row.mensaje || 'Listo.'
+        return
+      }
+      if (row?.status === 'error') { statusEl.textContent = 'Error del agente: ' + (row.mensaje || 'sin detalle'); return }
+      if (Date.now() - inicio > TIMEOUT_MS) {
+        statusEl.textContent = 'La tienda no respondió a tiempo (¿está abierto el agente en la PC?).'
+        return
+      }
+      statusEl.textContent = row?.status === 'running' ? 'Calculando en la tienda...' : 'Esperando que el agente tome la solicitud...'
+    }
+  } finally {
+    btn.disabled = false
+  }
+}
+
+async function exportarAuditoria() {
+  if (!auditoriaDatos) return
+  const btn = document.getElementById('btnExportarAuditoria')
+  btn.disabled = true
+  try {
+    const { exportarAuditoriaExcel } = await import('./lib/exportarAuditoriaExcel.js')
+    await exportarAuditoriaExcel(auditoriaDatos)
+  } catch (err) {
+    document.getElementById('auditoriaStatus').textContent = 'No se pudo exportar: ' + err.message
+  } finally {
+    btn.disabled = false
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 function initApp() {
@@ -687,6 +873,13 @@ function initApp() {
   markActiveQuick()
 
   document.getElementById('btnRefresh').addEventListener('click', solicitarActualizacion)
+  document.getElementById('btnAuditoria').addEventListener('click', abrirAuditoria)
+  document.getElementById('btnCerrarAuditoria').addEventListener('click', cerrarAuditoria)
+  document.getElementById('auditoriaOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'auditoriaOverlay') cerrarAuditoria()
+  })
+  document.getElementById('auditoriaForm').addEventListener('submit', generarAuditoria)
+  document.getElementById('btnExportarAuditoria').addEventListener('click', exportarAuditoria)
   document.getElementById('rangoForm').addEventListener('submit', (e) => {
     e.preventDefault()
     const statusEl = document.getElementById('status')
@@ -703,6 +896,10 @@ function initApp() {
   })
   document.getElementById('filtroProducto').addEventListener('input', renderRotacion)
   document.getElementById('filtroDepto').addEventListener('change', renderRotacion)
+  document.getElementById('btnToggleInternas').addEventListener('click', () => {
+    internasVisibles = !internasVisibles
+    renderCuentasInternas(ultimoDatos && ultimoDatos.cuentasInternas)
+  })
 
   cargarFechaMinima()
   cargarTendencia()

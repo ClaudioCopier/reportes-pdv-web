@@ -38,7 +38,7 @@ function el(html) {
 function activarSesion(supabaseUrl, supabaseAnonKey) {
   supabase = createClient(supabaseUrl, supabaseAnonKey)
   document.getElementById('gate').style.display = 'none'
-  document.getElementById('appRoot').style.display = ''
+  document.getElementById('appRoot').style.display = 'flex'
   initApp()
 }
 
@@ -101,9 +101,7 @@ const RANGOS_ULTIMOS = [
 const TODOS_CHIPS = [...RANGOS_RAPIDOS, ...RANGOS_ULTIMOS]
 
 // Default "Este mes" -- para que "Rotación de productos" no arranque vacía
-// mostrando solo el día de hoy (ver plan: stats.js ya calcula la velocidad
-// de venta dividiendo por los días activos transcurridos del mes, esto solo
-// cambia qué se ve al abrir el sitio).
+// mostrando solo el día de hoy.
 let claveActual = 'mes';
 let modo = 'rapido'; // 'rapido' (reportes_ventas_actual) | 'rango' (fDesde/fHasta o "últimos N días", combina reportes_ventas_historico)
 let chipActivo = 'mes' // clave del chip resaltado arriba, o null si el rango activo vino del formulario manual
@@ -184,9 +182,7 @@ function renderKpis(data) {
 
 // ---------------------------------------------------------------------------
 // Tendencia histórica -- todo reportes_ventas_historico, independiente del
-// periodo seleccionado arriba. Trae solo el resumen de cada día (path JSON
-// de Postgres, ~36KB por día completo si se bajara entero, evitado a
-// propósito) y se carga una sola vez al abrir el sitio.
+// periodo seleccionado arriba.
 // ---------------------------------------------------------------------------
 async function cargarTendencia() {
   const box = document.getElementById('chartTendencia')
@@ -207,8 +203,7 @@ async function cargarTendencia() {
 
 // ---------------------------------------------------------------------------
 // Salud del agente -- heartbeat independiente de si alguien pidió un
-// reporte (con el modelo a pedido, reportes_ventas_actual.actualizado_en
-// viejo ya no implica que algo falló). Se revisa una vez al abrir el sitio.
+// reporte. Se revisa una vez al abrir el sitio.
 // ---------------------------------------------------------------------------
 async function cargarSalud() {
   const box = document.getElementById('agenteBanner')
@@ -285,7 +280,7 @@ function renderRotacion() {
       }
       const raw = p[c.key]
       const display = c.fmt ? c.fmt(raw) : raw
-      const tag = c.key === 'nombre' && p.estimado ? '<span class="estimado-tag" title="Incluye ventas de hoy estimadas del log, todavía no confirmadas por un respaldo">HOY: EST.</span>' : ''
+      const tag = c.key === 'nombre' && p.estimado ? '<span class="badge-soft" title="Incluye ventas de hoy estimadas del log, todavía no confirmadas por un respaldo">HOY: EST.</span>' : ''
       return `<td class="${c.num ? 'num' : ''}">${display}${tag}</td>`
     }).join('')
     return `<tr>${cells}</tr>`
@@ -335,10 +330,7 @@ function renderCashflow(caja) {
 }
 
 // ---------------------------------------------------------------------------
-// Cuentas internas (forma_pago "Crédito" -- retiro de vencidos, venta a
-// precio costo a familiares, la cuenta del jefe) -- ver stats.js::
-// cuentasInternas(). Oculto detrás de un botón a propósito (no es para
-// mirar todos los días, solo para fiscalizar de vez en cuando).
+// Cuentas internas (forma_pago "Crédito").
 // ---------------------------------------------------------------------------
 let internasVisibles = false
 
@@ -380,13 +372,12 @@ function renderVivoBanner(info) {
   if (!info || !info.activo) { box.style.display = 'none'; return }
   const desde = info.cutoff ? new Date(info.cutoff).toLocaleString('es-CL') : ''
   box.style.display = 'flex'
-  box.innerHTML = `⚡ Incluye <b>${info.ticketsEnVivo}</b> venta(s) de hoy en vivo, reconstruidas directamente del registro del POS (todavía sin confirmar por un respaldo). Base de datos actualizada hasta ${desde}. El detalle por producto de esas ventas es una estimación (marcado <span class="estimado-tag">HOY: EST.</span>).`
+  box.innerHTML = `⚡ Incluye <b>${info.ticketsEnVivo}</b> venta(s) de hoy en vivo, reconstruidas directamente del registro del POS (todavía sin confirmar por un respaldo). Base de datos actualizada hasta ${desde}. El detalle por producto de esas ventas es una estimación (marcado <span class="badge-soft">HOY: EST.</span>).`
 }
 
 // ---------------------------------------------------------------------------
 // Rango personalizado -- combina N días de reportes_ventas_historico
-// client-side. Mismo criterio de clasificación ABC (Pareto 80/95) que ya usa
-// agente-servidor/lib/stats.js::rotacionProductos, portado acá.
+// client-side.
 // ---------------------------------------------------------------------------
 function calcularABC(productos) {
   const totalIngreso = productos.reduce((s, p) => s + p.ingreso, 0)
@@ -403,11 +394,7 @@ function calcularABC(productos) {
   })
 }
 
-// dias: [{ fecha, datos }] ascendente por fecha, datos = forma que devuelve
-// stats.dashboard() calculado para ESE día (una fila de reportes_ventas_historico,
-// o la clave 'hoy' de reportes_ventas_actual si el rango incluye hoy).
-// stockBajo y resumenAnterior (comparativo) NO se combinan -- son una foto
-// del momento, sumarlos entre días no tiene sentido; se avisa en rangoBanner.
+// dias: [{ fecha, datos }] ascendente por fecha.
 function combinarDias(dias) {
   const n = dias.length
   if (!n) return null
@@ -433,7 +420,7 @@ function combinarDias(dias) {
       cur.cantidad += p.cantidad
       cur.ingreso += p.ingreso
       cur.costo += p.costo
-      if (p.existencia !== null) cur.existencia = p.existencia // dias viene ascendente: el último no-nulo gana (más reciente)
+      if (p.existencia !== null) cur.existencia = p.existencia
       cur.estimado = cur.estimado || p.estimado
       porCodigo.set(p.codigo, cur)
     }
@@ -476,7 +463,6 @@ function combinarDias(dias) {
 
   const porCajero = new Map()
   for (const { datos } of dias) {
-    // días guardados antes de la Fase D no tienen este campo todavía
     for (const c of datos.ventasPorCajero || []) {
       const cur = porCajero.get(c.cajero) || { cajero: c.cajero, tickets: 0, total: 0, gananciaBruta: 0 }
       cur.tickets += c.tickets; cur.total += c.total; cur.gananciaBruta += c.gananciaBruta
@@ -500,7 +486,6 @@ function combinarDias(dias) {
   }
   const flujoCaja = { entradasCaja, salidasCaja, pagosAbonos, salidasPorCategoria: [...porCategoria.values()].sort((a, b) => b.total - a.total) }
 
-  // días guardados antes de esta sección no tienen datos.cuentasInternas todavía
   const movimientosInternas = dias.flatMap((d) => (d.datos.cuentasInternas || {}).movimientos || [])
   const porCuentaInternas = new Map()
   for (const m of movimientosInternas) {
@@ -531,11 +516,7 @@ function combinarDias(dias) {
   }
 }
 
-// Mensaje del banner de rango personalizado -- explica de forma explícita
-// cuando el histórico guardado no llega a cubrir todo lo pedido (en vez de
-// que el gráfico/tabla simplemente se vean "cortos" sin avisar). Ver plan:
-// el histórico recién empezó a guardarse hace poco, así que hoy es normal
-// pedir 30 días y encontrar menos -- no es un bug, pero tiene que decirse.
+// Mensaje del banner de rango personalizado.
 function renderRangoBanner(diasEncontrados, desdeStr, hastaStr) {
   const box = document.getElementById('rangoBanner')
   if (modo !== 'rango') { box.style.display = 'none'; return }
@@ -580,10 +561,6 @@ async function cargarRango(desdeStr, hastaStr) {
       .eq('clave', 'hoy')
       .maybeSingle()
     if (errHoy) { statusEl.textContent = 'Error: ' + errHoy.message; return }
-    // Si el agente lleva un tiempo apagado, la fila 'hoy' puede haber quedado
-    // congelada en un día que ya está en el histórico -- usarla igual (mal
-    // etiquetada como "hoy") duplicaría ese día. Solo se usa si de verdad
-    // corresponde al día de hoy.
     if (hoyRow && hoyRow.datos.periodo?.hasta === hoyStr) dias = [...historico, { fecha: hoyStr, datos: hoyRow.datos }]
   }
 
@@ -629,7 +606,7 @@ function pintar(datos) {
 
   renderTable('ventasPorCajero',
     [{ label: 'Cajero' }, { label: 'Tickets', num: true }, { label: 'Total', num: true }, { label: 'Ganancia', num: true }],
-    datos.ventasPorCajero || [], // reportes ya guardados antes de la Fase D no tienen este campo todavía
+    datos.ventasPorCajero || [],
     (r) => `<tr><td>${r.cajero}</td><td class="num">${num(r.tickets)}</td><td class="num">${money(r.total)}</td><td class="num">${money(r.gananciaBruta)}</td></tr>`,
     'Sin ventas en este periodo.'
   )
@@ -672,14 +649,11 @@ async function cargar() {
 }
 
 // ---------------------------------------------------------------------------
-// Actualizar ahora -- el agente de la tienda ya NO recalcula solo cada pocos
-// minutos (para no generar carga de fondo en Supabase sin motivo); esto pide
-// una actualización puntual insertando una fila en reportes_solicitudes
-// (mismo mecanismo que ya usa la sincronización de inventario) y espera a
+// Actualizar ahora -- inserta una fila en reportes_solicitudes y espera a
 // que el agente la procese antes de releer los datos frescos.
 // ---------------------------------------------------------------------------
 async function solicitarActualizacion() {
-  if (modo === 'rango') { cargar(); return } // rango personalizado: recombina lo ya guardado, no pide nada al agente
+  if (modo === 'rango') { cargar(); return }
 
   const statusEl = document.getElementById('status')
   const btn = document.getElementById('btnRefresh')
@@ -719,9 +693,7 @@ async function solicitarActualizacion() {
   }
 }
 
-// Fecha más antigua real en reportes_ventas_historico -- se usa como piso
-// del input "Desde" (para no dejar pedir un rango que ya sabemos vacío) y en
-// el mensaje de renderRangoBanner() cuando un rango pedido viene incompleto.
+// Fecha más antigua real en reportes_ventas_historico.
 async function cargarFechaMinima() {
   const { data } = await supabase
     .from('reportes_ventas_historico')
@@ -737,10 +709,7 @@ async function cargarFechaMinima() {
 }
 
 // ---------------------------------------------------------------------------
-// Auditoría de compra por marca -- panel aparte, no combina con nada del
-// dashboard principal. Botón dispara agente-servidor (lib/auditoriaCompra.js)
-// vía auditoria_solicitudes, mismo mecanismo de "solicitud + polling" que ya
-// usa solicitarActualizacion(). Ver SERVIDOR.md.
+// Auditoría de compra por marca.
 // ---------------------------------------------------------------------------
 let auditoriaDatos = null
 
@@ -751,10 +720,6 @@ function cerrarAuditoria() {
   document.getElementById('auditoriaOverlay').style.display = 'none'
 }
 
-// Tabla técnica completa (detrás de "Ver detalle técnico completo") -- todos
-// los números crudos, para quien quiera auditar el cálculo. El resumen
-// ejecutivo de arriba (KPIs, gráfico, "Qué comprar") es lo pensado para la
-// jefa, que no necesita leer esto para decidir.
 const AUDITORIA_COLS = [
   { key: 'nombre', label: 'Producto', num: false },
   { key: 'existenciaActual', label: 'Existencia', num: true, fmt: (v) => v === null ? '—' : num(v) },
@@ -789,9 +754,6 @@ function renderAuditoriaTabla(filas) {
   box.appendChild(el(`<table><thead><tr>${thead}</tr></thead><tbody>${rows}</tbody></table>`))
 }
 
-// Nombre de mes para el eje del gráfico agregado -- calculado desde el punto
-// medio del bucket (no "desde" ni "hasta") para que un bucket que cruza dos
-// meses calendario quede etiquetado con el que más pesa.
 function mesBucketLabel(desdeStr, hastaStr) {
   const d1 = new Date(desdeStr + 'T00:00:00')
   const d2 = new Date(hastaStr + 'T00:00:00')
@@ -800,11 +762,6 @@ function mesBucketLabel(desdeStr, hastaStr) {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-// Suma, bucket a bucket, la cantidad realmente vendida (no la ajustada por
-// stockout -- más fácil de explicarle a alguien sin experiencia en el
-// cálculo) de TODOS los productos de la marca. Devuelve los 3 buckets ya
-// con % de cambio contra el anterior, más un titular en palabras simples
-// (no un gráfico) para el caso "creció"/"bajó"/"recién empezó a venderse".
 function calcularTendenciaAgregada(filas) {
   if (!filas.length || !filas[0].mensual || !filas[0].mensual.length) return { buckets: [], headline: null }
 
@@ -853,10 +810,6 @@ function renderAuditoriaKpis(datos) {
   cards.forEach((c) => box.appendChild(el(`<div class="kpi-card"><div class="kpi-label">${c.label}</div><div class="kpi-value">${c.value}</div></div>`)))
 }
 
-// Compara el último bucket mensual contra el anterior (mismo dato que ya
-// calcula agente-servidor/lib/auditoriaCompra.js) para una etiqueta simple
-// en vez de obligar a leer el número -- ±5% se considera "estable" para no
-// marcar como tendencia el ruido normal de venta día a día.
 function tendenciaBadge(f) {
   const mensual = f.mensual || []
   const last = mensual[mensual.length - 1]
@@ -896,7 +849,7 @@ let auditoriaDetalleVisible = false
 function toggleAuditoriaDetalle() {
   auditoriaDetalleVisible = !auditoriaDetalleVisible
   document.getElementById('auditoriaTabla').style.display = auditoriaDetalleVisible ? '' : 'none'
-  document.getElementById('btnToggleAuditoriaDetalle').textContent = auditoriaDetalleVisible ? 'Ocultar detalle técnico' : 'Ver detalle técnico completo'
+  document.getElementById('btnToggleAuditoriaDetalle').textContent = auditoriaDetalleVisible ? 'Ocultar detalle técnico' : 'Ver tabla de datos técnicos completos'
 }
 
 function pintarAuditoria(datos) {
@@ -904,7 +857,7 @@ function pintarAuditoria(datos) {
 
   auditoriaDetalleVisible = false
   document.getElementById('auditoriaTabla').style.display = 'none'
-  document.getElementById('btnToggleAuditoriaDetalle').textContent = 'Ver detalle técnico completo'
+  document.getElementById('btnToggleAuditoriaDetalle').textContent = 'Ver tabla de datos técnicos completos'
 
   renderAuditoriaKpis(datos)
 
@@ -928,10 +881,8 @@ async function generarAuditoria(e) {
   const meses = Number(document.getElementById('auditoriaMeses').value) || 1
   const crecimiento = Number(document.getElementById('auditoriaCrecimiento').value)
   if (!patronInput) { statusEl.textContent = 'Ingresá una marca o patrón (ej. "FYE").'; return }
-  // Mismo criterio que inventario-app (WorkerPage.jsx: ilike(prefijo + '%')):
-  // el usuario solo escribe el prefijo de la marca, el '%' se agrega solo si
-  // no lo puso ya -- lib/auditoriaCompra.js espera el patrón completo (LIKE
-  // exacto, sin wildcard implícito, para que el CLI siga funcionando igual).
+  // Mismo criterio que inventario-app: el usuario solo escribe el prefijo de
+  // la marca, el '%' se agrega solo si no lo puso ya.
   const patron = patronInput.includes('%') ? patronInput : patronInput + '%'
 
   btn.disabled = true

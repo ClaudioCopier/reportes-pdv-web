@@ -27,7 +27,7 @@ export async function exportarAuditoriaExcel(datos) {
       { header: `${label} — crecim. %`, key: `m${i}_crec`, width: 16 },
     ])),
   ]
-  hoja.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F4F3F' } }
+  hoja.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF154832' } }
   hoja.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
 
   for (const f of datos.filas) {

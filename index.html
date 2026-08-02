@@ -4,166 +4,222 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Reportes de Ventas — Punto Verde Organic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
 
 <div id="gate" class="gate">
   <form id="gateForm" class="gate-box">
-    <h1>Reportes de Ventas</h1>
-    <p class="subtitle">Punto Verde Organic</p>
-    <input type="password" id="gateClave" placeholder="Clave de acceso" autofocus>
-    <button type="submit" class="btn btn-primary">Entrar</button>
+    <div class="gate-logo">🌱</div>
+    <h1>Punto Verde Organic</h1>
+    <p class="subtitle">Acceso seguro a Reportes</p>
+    <div class="field">
+      <input type="password" id="gateClave" placeholder="Clave de acceso" autofocus>
+    </div>
+    <button type="submit" class="btn btn-primary">Entrar al sistema</button>
     <p id="gateError" class="gate-error"></p>
   </form>
 </div>
 
-<div id="appRoot" style="display:none">
-  <header class="topbar">
-    <div class="topbar-title">
-      <h1>Reportes de Ventas</h1>
-      <span class="subtitle">Punto Verde Organic — datos de AbarrotesPDV</span>
+<div id="appRoot" class="app-layout" style="display:none">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-icon">🌱</div>
+      <div class="logo-text">Punto Verde<br><span>Organic</span></div>
     </div>
-    <div class="topbar-actions">
-      <span id="status" class="status">Cargando...</span>
-      <button id="btnAuditoria" class="btn btn-outline">Auditoría de compra</button>
-      <button id="btnRefresh" class="btn btn-primary">Actualizar ahora</button>
-    </div>
-  </header>
 
-  <div class="filterbar">
-    <div class="filterbar-quick" id="quickRanges"></div>
-    <form class="filterbar-custom" id="rangoForm">
-      <span class="filterbar-custom-label">Rango personalizado</span>
-      <label>Desde <input type="date" id="fDesde"></label>
-      <label>Hasta <input type="date" id="fHasta"></label>
-      <button type="submit" class="btn btn-secondary">Aplicar</button>
-    </form>
-  </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Dashboard</div>
+      <div class="nav-item active nav-item-static">
+        <span class="icon">📊</span> Ventas
+      </div>
 
-  <main id="app">
-    <div id="agenteBanner" class="alerta-banner" style="display:none"></div>
-    <div id="vivoBanner" class="vivo-banner" style="display:none"></div>
-    <div id="rangoBanner" class="rango-banner" style="display:none"></div>
+      <div class="nav-section" style="margin-top: 24px;">Herramientas</div>
+      <button id="btnAuditoria" class="nav-item">
+        <span class="icon">🛒</span> Auditoría de compra
+      </button>
+      <button id="btnRefresh" class="nav-item">
+        <span class="icon">🔄</span> Actualizar ahora
+      </button>
+    </nav>
+  </aside>
 
-    <section class="kpis" id="kpis"></section>
+  <!-- MAIN CONTENT -->
+  <div class="main-wrapper">
+    <header class="topbar">
+      <div class="topbar-info">
+        <h1>Reportes de Ventas</h1>
+        <span id="status" class="status">Cargando...</span>
+      </div>
 
-    <section class="card">
-      <div class="card-header"><h2>Ventas por día — periodo seleccionado</h2></div>
-      <div id="chartVentas" class="chart"></div>
-    </section>
+      <div class="topbar-filters">
+        <div class="filterbar-quick" id="quickRanges"></div>
+        <form class="filterbar-custom" id="rangoForm">
+          <label class="filterbar-custom-label">Desde <input type="date" id="fDesde" required></label>
+          <label class="filterbar-custom-label">Hasta <input type="date" id="fHasta" required></label>
+          <button type="submit" class="btn btn-secondary">Filtrar</button>
+        </form>
+      </div>
+    </header>
 
-    <section class="card">
-      <div class="card-header"><h2>Tendencia histórica — todos los días guardados</h2></div>
-      <p class="hint">Evolución del total vendido por día, de todo el historial disponible (independiente del periodo seleccionado arriba).</p>
-      <div id="chartTendencia" class="chart"></div>
-    </section>
+    <main id="app" class="content-area">
+      <div id="agenteBanner" class="alerta-banner" style="display:none"></div>
+      <div id="vivoBanner" class="vivo-banner" style="display:none"></div>
+      <div id="rangoBanner" class="rango-banner" style="display:none"></div>
 
-    <section class="card">
-      <div class="card-header">
-        <h2>Rotación de productos</h2>
-        <div class="table-controls">
-          <input type="text" id="filtroProducto" placeholder="Buscar producto o código...">
-          <select id="filtroDepto"><option value="">Todos los departamentos</option></select>
+      <!-- KPIs -->
+      <section class="kpis" id="kpis"></section>
+
+      <!-- Gráficos Principales -->
+      <section class="card">
+        <div class="card-header">
+          <h2>Ventas por día</h2>
+          <div class="card-actions"><span class="badge-soft">Periodo seleccionado</span></div>
         </div>
-      </div>
-      <p class="hint">Clase ABC: <b>A</b> = productos que generan el 80% del ingreso (los críticos), <b>B</b> = siguiente 15%, <b>C</b> = el resto (larga cola / candidatos a revisar). Clic en un encabezado para ordenar.</p>
-      <div id="rotacionProductos" class="table-wrap scroll-y-big"></div>
-    </section>
-
-    <div class="grid-2">
-      <section class="card">
-        <div class="card-header"><h2>Ventas por departamento</h2></div>
-        <div id="porDepartamento" class="table-wrap"></div>
+        <div id="chartVentas" class="chart"></div>
       </section>
 
       <section class="card">
-        <div class="card-header"><h2>Formas de pago</h2></div>
-        <div id="formasPago" class="table-wrap"></div>
+        <div class="card-header">
+          <h2>Tendencia histórica</h2>
+        </div>
+        <p class="hint-header">Evolución del total vendido por día, de todo el historial disponible (independiente del periodo seleccionado arriba).</p>
+        <div id="chartTendencia" class="chart"></div>
       </section>
-    </div>
 
-    <section class="card">
-      <div class="card-header"><h2>Ventas por cajero</h2></div>
-      <div id="ventasPorCajero" class="table-wrap"></div>
-    </section>
+      <!-- Rotación -->
+      <section class="card">
+        <div class="card-header">
+          <h2>Rotación de productos</h2>
+          <div class="table-controls">
+            <div class="search-input-wrap">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="filtroProducto" placeholder="Buscar producto...">
+            </div>
+            <select id="filtroDepto"><option value="">Todos los departamentos</option></select>
+          </div>
+        </div>
+        <p class="hint-header">Clase ABC: <b>A</b> = productos que generan el 80% del ingreso (los críticos), <b>B</b> = siguiente 15%, <b>C</b> = el resto (larga cola / candidatos a revisar). Clic en un encabezado para ordenar.</p>
+        <div id="rotacionProductos" class="table-wrap scroll-y-big"></div>
+      </section>
 
-    <section class="card">
-      <div class="card-header"><h2>Flujo de caja (movimientos manuales)</h2></div>
-      <div class="cashflow-kpis" id="cashflowKpis"></div>
-      <div id="salidasCategoria" class="table-wrap"></div>
-      <p class="hint">La mayoría de "Retiros / depósitos a banco" no son gastos operativos, son traslados de efectivo. Solo "Fletes/envíos" e "Insumos/proveedores" se acercan a un gasto real — el resto queda "Sin categorizar" porque el cajero no dejó una nota reconocible.</p>
-    </section>
+      <div class="grid-2">
+        <section class="card">
+          <div class="card-header"><h2>Ventas por departamento</h2></div>
+          <div id="porDepartamento" class="table-wrap"></div>
+        </section>
 
-    <section class="card">
-      <div class="card-header alert-header">
-        <h2>⚠ Productos con stock bajo</h2>
-        <span id="stockCount" class="badge"></span>
+        <section class="card">
+          <div class="card-header"><h2>Formas de pago</h2></div>
+          <div id="formasPago" class="table-wrap"></div>
+        </section>
       </div>
-      <div id="stockBajo" class="table-wrap scroll-y"></div>
-    </section>
 
-    <section class="card">
-      <div class="card-header">
-        <h2>Cuentas internas</h2>
-        <button id="btnToggleInternas" class="btn btn-outline">Ver detalle</button>
+      <div class="grid-2">
+        <section class="card">
+          <div class="card-header"><h2>Ventas por cajero</h2></div>
+          <div id="ventasPorCajero" class="table-wrap"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-header alert-header">
+            <h2>⚠ Productos con stock bajo</h2>
+            <span id="stockCount" class="badge"></span>
+          </div>
+          <div id="stockBajo" class="table-wrap scroll-y"></div>
+        </section>
       </div>
-      <p class="hint">Ventas con forma de pago "Crédito" — en esta tienda son cuentas internas (retiro de vencidos, venta a precio costo a familiares, la cuenta del jefe para sacar mercadería), no ventas reales. Ya están excluidas de todos los totales de arriba. Esto es solo para fiscalizar de vez en cuando que nadie las use de más — no es parte del uso diario.</p>
-      <div id="cuentasInternasResumen" class="table-wrap" style="display:none"></div>
-      <div id="cuentasInternasDetalle" class="table-wrap scroll-y-big" style="display:none"></div>
-    </section>
-  </main>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>Flujo de caja</h2>
+          <span class="badge-soft">Movimientos manuales</span>
+        </div>
+        <div class="cashflow-kpis" id="cashflowKpis"></div>
+        <div id="salidasCategoria" class="table-wrap"></div>
+        <p class="hint-header" style="padding: 0 24px 20px;">La mayoría de "Retiros / depósitos a banco" no son gastos operativos, son traslados de efectivo. Solo "Fletes/envíos" e "Insumos/proveedores" se acercan a un gasto real — el resto queda "Sin categorizar" porque el cajero no dejó una nota reconocible.</p>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>Cuentas internas</h2>
+          <button id="btnToggleInternas" class="btn btn-outline btn-sm">Ver detalle</button>
+        </div>
+        <p class="hint-header">Ventas con forma de pago "Crédito" — en esta tienda son cuentas internas (retiro de vencidos, venta a precio costo a familiares, la cuenta del jefe para sacar mercadería), no ventas reales. Ya están excluidas de todos los totales de arriba. Esto es solo para fiscalizar de vez en cuando que nadie las use de más — no es parte del uso diario.</p>
+        <div id="cuentasInternasResumen" class="table-wrap" style="display:none"></div>
+        <div id="cuentasInternasDetalle" class="table-wrap scroll-y-big" style="display:none"></div>
+      </section>
+    </main>
+  </div>
 </div>
 
+<!-- AUDITORÍA DE COMPRA OVERLAY -->
 <div id="auditoriaOverlay" class="auditoria-overlay" style="display:none">
   <div class="auditoria-panel">
     <div class="auditoria-panel-header">
-      <h2>Auditoría de compra</h2>
+      <div>
+        <h2>Auditoría de compra</h2>
+        <p class="subtitle">Ventas reales de los últimos 90 días, ajustadas por los días sin stock, para decidir cuánto comprar antes de aprobar un pedido a un proveedor.</p>
+      </div>
       <button id="btnCerrarAuditoria" class="btn-close" aria-label="Cerrar" type="button">✕</button>
     </div>
-    <p class="hint">Ventas reales de los últimos 90 días, ajustadas por los días que cada producto estuvo en $0 stock, proyectadas a los meses de cobertura pedidos — para decidir cuánto comprar antes de aprobar un pedido a un proveedor. Busca en código y descripción (ej. <code>FYE</code> encuentra "FYE GOTAS ZEN", "FYE DEFENSAS", etc.).</p>
-    <form id="auditoriaForm" class="auditoria-form">
-      <label>Marca o patrón
-        <input type="text" id="auditoriaPatron" placeholder='Ej: FYE' autocomplete="off">
-      </label>
-      <label>Meses de cobertura
-        <input type="number" id="auditoriaMeses" value="1" min="1" step="1">
-      </label>
-      <label>% de crecimiento
-        <input type="number" id="auditoriaCrecimiento" value="10" min="0" step="1">
-      </label>
-      <button type="submit" class="btn btn-primary">Generar</button>
-    </form>
-    <p id="auditoriaStatus" class="hint"></p>
-    <div id="auditoriaResultado" style="display:none">
-      <div class="kpis" id="auditoriaKpis"></div>
 
-      <section class="card">
-        <div class="card-header">
-          <h2>Cómo se movió la marca</h2>
-          <span id="auditoriaTendenciaHeadline" class="tendencia-headline"></span>
+    <div class="auditoria-body">
+      <form id="auditoriaForm" class="auditoria-form card-inner">
+        <div class="form-group">
+          <label>Marca o patrón</label>
+          <input type="text" id="auditoriaPatron" placeholder='Ej: FYE' autocomplete="off">
         </div>
-        <p class="hint">Unidades realmente vendidas de esta marca, mes a mes, dentro de los últimos 90 días — para ver si la demanda viene subiendo o bajando antes de decidir cuánto pedir.</p>
-        <div id="auditoriaChartTendencia" class="chart"></div>
-      </section>
-
-      <section class="card">
-        <div class="card-header">
-          <h2>Qué comprar</h2>
-          <button id="btnExportarAuditoria" type="button" class="btn btn-secondary">Exportar a Excel</button>
+        <div class="form-group">
+          <label>Meses de cobertura</label>
+          <input type="number" id="auditoriaMeses" value="1" min="1" step="1">
         </div>
-        <p class="hint">Ordenado de mayor a menor cantidad a comprar. "Tendencia" compara el último mes contra el anterior.</p>
-        <div id="auditoriaComprarLista" class="table-wrap"></div>
-      </section>
+        <div class="form-group">
+          <label>% Crecimiento esp.</label>
+          <input type="number" id="auditoriaCrecimiento" value="10" min="0" step="1">
+        </div>
+        <button type="submit" class="btn btn-primary" style="align-self: flex-end;">Generar Auditoría</button>
+      </form>
 
-      <section class="card" id="auditoriaRevisionCard" style="display:none">
-        <div class="card-header"><h2>Revisar a mano</h2></div>
-        <p class="hint">Estos productos no se pudieron proyectar con confianza (poca venta, mucho tiempo sin stock, o el inventario registrado no coincide con la existencia actual) — la decisión queda para vos, no un número automático.</p>
-        <ul id="auditoriaRevisionLista" class="auditoria-revision-lista"></ul>
-      </section>
+      <p id="auditoriaStatus" class="status-msg"></p>
 
-      <button id="btnToggleAuditoriaDetalle" type="button" class="btn btn-outline auditoria-detalle-btn">Ver detalle técnico completo</button>
-      <div id="auditoriaTabla" class="table-wrap scroll-y-big" style="display:none"></div>
+      <div id="auditoriaResultado" style="display:none">
+        <div class="kpis auditoria-kpis-grid" id="auditoriaKpis"></div>
+
+        <section class="card-inner">
+          <div class="card-header-inner">
+            <h3>Cómo se movió la marca</h3>
+            <span id="auditoriaTendenciaHeadline" class="tendencia-headline"></span>
+          </div>
+          <p class="hint-header">Unidades realmente vendidas de esta marca, mes a mes, dentro de los últimos 90 días.</p>
+          <div id="auditoriaChartTendencia" class="chart"></div>
+        </section>
+
+        <section class="card-inner">
+          <div class="card-header-inner">
+            <h3>Plan de Compra Sugerido</h3>
+            <button id="btnExportarAuditoria" type="button" class="btn btn-secondary btn-sm">Exportar Excel</button>
+          </div>
+          <p class="hint-header">Ordenado de mayor a menor cantidad a comprar. "Tendencia" compara el último mes contra el anterior.</p>
+          <div id="auditoriaComprarLista" class="table-wrap"></div>
+        </section>
+
+        <section class="card-inner alert-card" id="auditoriaRevisionCard" style="display:none">
+          <div class="card-header-inner"><h3>⚠ Requieren revisión manual</h3></div>
+          <p class="hint-header">Estos productos no se pudieron proyectar con confianza (poca venta, mucho tiempo sin stock, o el inventario registrado no coincide con la existencia actual) — la decisión queda para vos, no un número automático.</p>
+          <ul id="auditoriaRevisionLista" class="auditoria-revision-lista"></ul>
+        </section>
+
+        <div class="detalle-tecnico-wrap">
+          <button id="btnToggleAuditoriaDetalle" type="button" class="btn btn-outline w-100">Ver tabla de datos técnicos completos</button>
+          <div id="auditoriaTabla" class="table-wrap scroll-y-big" style="display:none; margin-top: 16px;"></div>
+        </div>
+      </div>
     </div>
   </div>
 </div>

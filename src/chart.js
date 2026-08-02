@@ -1,7 +1,9 @@
 // Gráficos SVG minimalistas, sin dependencias externas (consistente con el
-// resto del sitio: Vite + JS plano). Reemplaza los <div class="bar-col">
-// anteriores, que no tenían eje, gridlines ni espacio reservado para las
-// etiquetas del eje X (se pisaban con las barras -- ver SERVIDOR.md/plan).
+// resto del sitio: Vite + JS plano). Rediseño visual (V2, 2026-08-02) sobre
+// la base de renderBarChart/renderLineChart originales -- mismo motor de
+// ejes/tooltips/decimado, look más suave (barras más anchas, radio 6px,
+// tooltip oscuro). Mantiene accesibilidad por teclado (tabindex/aria-label/
+// focus-blur) que la primera pasada de rediseño había perdido.
 const NS = 'http://www.w3.org/2000/svg'
 
 function svgEl(tag, attrs = {}) {
@@ -53,18 +55,14 @@ function decimatedIndices(n, plotWidth, minLabelWidth = 46) {
   return idxs
 }
 
-// Path de una barra con esquinas superiores redondeadas y base cuadrada
-// (spec: "4px rounded data-end, square at the baseline").
+// Path de una barra con esquinas superiores redondeadas y base cuadrada.
 function roundedTopBarPath(x, y, w, h, r) {
   const rr = Math.max(0, Math.min(r, w / 2, h))
   if (rr === 0) return `M${x},${y + h} L${x},${y} L${x + w},${y} L${x + w},${y + h} Z`
   return `M${x},${y + h} L${x},${y + rr} Q${x},${y} ${x + rr},${y} L${x + w - rr},${y} Q${x + w},${y} ${x + w},${y + rr} L${x + w},${y + h} Z`
 }
 
-// Tooltip HTML posicionado sobre el SVG. Recibe coordenadas en el espacio
-// lógico del viewBox y las convierte al espacio CSS real del contenedor en
-// cada show() -- así queda correcto aunque el SVG se haya escalado
-// responsivamente desde que se dibujó.
+// Tooltip HTML posicionado sobre el SVG.
 function makeTooltip(wrap, svg, W, H) {
   const tip = document.createElement('div')
   tip.className = 'chart-tooltip'
@@ -116,7 +114,7 @@ function ejes(svg, { margin, width, height, plotW, plotH, ticks, top, money }) {
   ticks.forEach((t) => {
     const yy = y(t)
     svg.appendChild(svgEl('line', { x1: margin.left, x2: width - margin.right, y1: yy, y2: yy, class: 'chart-grid' }))
-    const label = svgEl('text', { x: margin.left - 8, y: yy + 4, class: 'chart-axis-label', 'text-anchor': 'end' })
+    const label = svgEl('text', { x: margin.left - 12, y: yy + 4, class: 'chart-axis-label', 'text-anchor': 'end' })
     label.textContent = money(t)
     svg.appendChild(label)
   })
@@ -128,10 +126,7 @@ function ejes(svg, { margin, width, height, plotW, plotH, ticks, top, money }) {
 }
 
 // ---------------------------------------------------------------------------
-// Gráfico de barras -- "Ventas por día". Un valor por día (total $), barras
-// que escalan al ancho disponible (nunca dependen de scroll horizontal para
-// mostrarse todas), tooltip con el detalle (costo/ganancia/tickets) al
-// pasar el mouse o con foco de teclado.
+// Gráfico de barras -- "Ventas por día".
 // ---------------------------------------------------------------------------
 export function renderBarChart(container, dias, { money, num }) {
   container.innerHTML = ''
@@ -142,8 +137,8 @@ export function renderBarChart(container, dias, { money, num }) {
   container.appendChild(wrap)
 
   const width = Math.max(320, wrap.clientWidth || container.clientWidth || 600)
-  const height = 260
-  const margin = { top: 16, right: 12, bottom: 34, left: 64 }
+  const height = 280
+  const margin = { top: 16, right: 12, bottom: 34, left: 70 }
   const plotW = width - margin.left - margin.right
   const plotH = height - margin.top - margin.bottom
 
@@ -155,7 +150,7 @@ export function renderBarChart(container, dias, { money, num }) {
 
   const n = dias.length
   const bandW = plotW / n
-  const barW = Math.max(2, Math.min(24, bandW - 2))
+  const barW = Math.max(4, Math.min(32, bandW - 4))
 
   const barsGroup = svgEl('g')
   dias.forEach((d, i) => {
@@ -163,7 +158,7 @@ export function renderBarChart(container, dias, { money, num }) {
     const barH = Math.max(2, (d.total / top) * plotH)
     const barY = margin.top + plotH - barH
     const path = svgEl('path', {
-      d: roundedTopBarPath(cx - barW / 2, barY, barW, barH, 4),
+      d: roundedTopBarPath(cx - barW / 2, barY, barW, barH, 6),
       class: 'chart-bar', tabindex: '0', role: 'img',
       'aria-label': `${fechaLabelLarga(d.dia)}: ${money(d.total)}`,
     })
@@ -173,7 +168,7 @@ export function renderBarChart(container, dias, { money, num }) {
 
   decimatedIndices(n, plotW).forEach((i) => {
     const cx = margin.left + bandW * i + bandW / 2
-    const label = svgEl('text', { x: cx, y: height - margin.bottom + 18, class: 'chart-axis-label', 'text-anchor': 'middle' })
+    const label = svgEl('text', { x: cx, y: height - margin.bottom + 20, class: 'chart-axis-label', 'text-anchor': 'middle' })
     label.textContent = fechaLabel(dias[i].dia)
     svg.appendChild(label)
   })
@@ -206,9 +201,7 @@ export function renderBarChart(container, dias, { money, num }) {
 }
 
 // ---------------------------------------------------------------------------
-// Gráfico de línea -- "Tendencia histórica". Una sola serie (total $/día),
-// crosshair que sigue el puntero y se ajusta al punto más cercano, mismos
-// ejes/gridlines que el de barras.
+// Gráfico de línea -- "Tendencia histórica".
 // ---------------------------------------------------------------------------
 export function renderLineChart(container, filas, { money, num }) {
   container.innerHTML = ''
@@ -219,8 +212,8 @@ export function renderLineChart(container, filas, { money, num }) {
   container.appendChild(wrap)
 
   const width = Math.max(320, wrap.clientWidth || container.clientWidth || 600)
-  const height = 260
-  const margin = { top: 16, right: 16, bottom: 34, left: 64 }
+  const height = 280
+  const margin = { top: 16, right: 16, bottom: 34, left: 70 }
   const plotW = width - margin.left - margin.right
   const plotH = height - margin.top - margin.bottom
 
@@ -242,14 +235,14 @@ export function renderLineChart(container, filas, { money, num }) {
   svg.appendChild(svgEl('path', { d: linePath, class: 'chart-line', fill: 'none' }))
 
   decimatedIndices(n, plotW).forEach((i) => {
-    const label = svgEl('text', { x: x(i), y: height - margin.bottom + 18, class: 'chart-axis-label', 'text-anchor': 'middle' })
+    const label = svgEl('text', { x: x(i), y: height - margin.bottom + 20, class: 'chart-axis-label', 'text-anchor': 'middle' })
     label.textContent = fechaLabel(filas[i].fecha)
     svg.appendChild(label)
   })
 
   const crosshair = svgEl('line', { y1: margin.top, y2: margin.top + plotH, class: 'chart-crosshair' })
   crosshair.style.display = 'none'
-  const dot = svgEl('circle', { r: 4, class: 'chart-dot' })
+  const dot = svgEl('circle', { r: 5, class: 'chart-dot' })
   dot.style.display = 'none'
   svg.appendChild(crosshair)
   svg.appendChild(dot)
@@ -302,12 +295,7 @@ export function renderLineChart(container, filas, { money, num }) {
 }
 
 // ---------------------------------------------------------------------------
-// Auditoría de compra -- tendencia agregada de una marca, 3 barras (una por
-// bucket de 30 días que ya arma agente-servidor/lib/auditoriaCompra.js).
-// Solo 3 categorías: no hace falta decimar el eje X como en renderBarChart.
-// Pensado para una jefa sin experiencia en código: eje en unidades reales
-// vendidas (no la venta "ajustada" por stockout, más difícil de explicar),
-// con el % de cambio contra el mes anterior en el tooltip.
+// Auditoría de compra -- tendencia agregada de una marca, 3 barras.
 // ---------------------------------------------------------------------------
 export function renderAuditoriaTendenciaChart(container, buckets, { num }) {
   container.innerHTML = ''
@@ -318,7 +306,7 @@ export function renderAuditoriaTendenciaChart(container, buckets, { num }) {
   container.appendChild(wrap)
 
   const width = Math.max(320, wrap.clientWidth || container.clientWidth || 600)
-  const height = 220
+  const height = 240
   const margin = { top: 16, right: 12, bottom: 34, left: 56 }
   const plotW = width - margin.left - margin.right
   const plotH = height - margin.top - margin.bottom
@@ -331,7 +319,7 @@ export function renderAuditoriaTendenciaChart(container, buckets, { num }) {
 
   const n = buckets.length
   const bandW = plotW / n
-  const barW = Math.min(90, bandW * 0.5)
+  const barW = Math.min(100, bandW * 0.6)
 
   const barsGroup = svgEl('g')
   buckets.forEach((b, i) => {
@@ -339,7 +327,7 @@ export function renderAuditoriaTendenciaChart(container, buckets, { num }) {
     const barH = Math.max(2, (b.cantidad / top) * plotH)
     const barY = margin.top + plotH - barH
     const path = svgEl('path', {
-      d: roundedTopBarPath(cx - barW / 2, barY, barW, barH, 4),
+      d: roundedTopBarPath(cx - barW / 2, barY, barW, barH, 6),
       class: 'chart-bar', tabindex: '0', role: 'img',
       'aria-label': `${b.label}: ${num(b.cantidad)} unidades`,
     })
@@ -349,7 +337,7 @@ export function renderAuditoriaTendenciaChart(container, buckets, { num }) {
 
   buckets.forEach((b, i) => {
     const cx = margin.left + bandW * i + bandW / 2
-    const label = svgEl('text', { x: cx, y: height - margin.bottom + 18, class: 'chart-axis-label', 'text-anchor': 'middle' })
+    const label = svgEl('text', { x: cx, y: height - margin.bottom + 20, class: 'chart-axis-label', 'text-anchor': 'middle' })
     label.textContent = b.label
     svg.appendChild(label)
   })

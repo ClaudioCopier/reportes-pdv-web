@@ -43,6 +43,9 @@
       <button id="btnAuditoria" class="nav-item">
         <span class="icon">🛒</span> Auditoría de compra
       </button>
+      <button id="btnAlertas" class="nav-item">
+        <span class="icon">⏳</span> Por quedarse sin stock
+      </button>
       <button id="btnRefresh" class="nav-item">
         <span class="icon">🔄</span> Actualizar ahora
       </button>
@@ -137,25 +140,6 @@
 
       <section class="card">
         <div class="card-header">
-          <h2>⏳ Por quedarse sin stock pronto</h2>
-          <div class="table-controls">
-            <label class="filterbar-custom-label">Avisar con <input type="number" id="alertasDias" value="14" min="1" step="1" style="width:52px"> días</label>
-            <button id="btnCalcularAlertas" type="button" class="btn btn-secondary btn-sm">Calcular ahora</button>
-          </div>
-        </div>
-        <p class="hint-header">Ritmo de venta real de los últimos 90 días (ajustado por los días sin stock) proyectado sobre la existencia actual de <b>todo el catálogo</b> — para saber con anticipación qué comprar, antes de que el producto se acabe. "Mínimo sugerido" es lo que convendría cargar en el POS para que sus propias alertas avisen a tiempo. Tarda cerca de 1 minuto en calcularse (recorre todo el catálogo) — no se recalcula solo, hay que pedirlo.</p>
-        <p id="alertasStatus" class="hint-header" style="padding-top:0"></p>
-        <div class="table-controls" style="padding: 0 24px 12px;">
-          <div class="search-input-wrap">
-            <span class="search-icon">🔍</span>
-            <input type="text" id="filtroAlertas" placeholder="Buscar producto...">
-          </div>
-        </div>
-        <div id="alertasTabla" class="table-wrap scroll-y-big"></div>
-      </section>
-
-      <section class="card">
-        <div class="card-header">
           <h2>Flujo de caja</h2>
           <span class="badge-soft">Movimientos manuales</span>
         </div>
@@ -239,6 +223,42 @@
           <div id="auditoriaTabla" class="table-wrap scroll-y-big" style="display:none; margin-top: 16px;"></div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ALERTAS DE REPOSICIÓN OVERLAY -->
+<div id="alertasOverlay" class="auditoria-overlay" style="display:none">
+  <div class="auditoria-panel">
+    <div class="auditoria-panel-header">
+      <div>
+        <h2>⏳ Por quedarse sin stock pronto</h2>
+        <p class="subtitle">Ritmo de venta real de los últimos 90 días (ajustado por los días sin stock) proyectado sobre la existencia actual de todo el catálogo — para saber con anticipación qué comprar. "Mínimo sugerido" es lo que convendría cargar en el POS para que sus propias alertas avisen a tiempo.</p>
+      </div>
+      <button id="btnCerrarAlertas" class="btn-close" aria-label="Cerrar" type="button">✕</button>
+    </div>
+
+    <div class="auditoria-body">
+      <div class="auditoria-form card-inner">
+        <div class="form-group">
+          <label>Avisar con cuántos días de anticipación</label>
+          <input type="number" id="alertasDias" value="14" min="1" step="1">
+        </div>
+        <button id="btnCalcularAlertas" type="button" class="btn btn-primary" style="align-self: flex-end;">Calcular ahora</button>
+      </div>
+      <p class="hint-header" style="padding: 4px 0 0;">Tarda cerca de 1 minuto en calcularse (recorre todo el catálogo) — no se recalcula solo, hay que pedirlo.</p>
+
+      <p id="alertasStatus" class="status-msg"></p>
+
+      <section class="card-inner">
+        <div class="card-header-inner">
+          <div class="search-input-wrap">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="filtroAlertas" placeholder="Buscar producto...">
+          </div>
+        </div>
+        <div id="alertasTabla" class="table-wrap scroll-y-big"></div>
+      </section>
     </div>
   </div>
 </div>

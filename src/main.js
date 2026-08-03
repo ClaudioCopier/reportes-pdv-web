@@ -718,6 +718,13 @@ async function cargarFechaMinima() {
 // ---------------------------------------------------------------------------
 let alertasFilas = []
 
+function abrirAlertas() {
+  document.getElementById('alertasOverlay').style.display = 'flex'
+}
+function cerrarAlertas() {
+  document.getElementById('alertasOverlay').style.display = 'none'
+}
+
 const ALERTAS_COLS = [
   { key: 'nombre', label: 'Producto', num: false },
   { key: 'existenciaActual', label: 'Existencia', num: true, fmt: num },
@@ -1083,6 +1090,11 @@ function initApp() {
   document.getElementById('btnToggleInternas').addEventListener('click', () => {
     internasVisibles = !internasVisibles
     renderCuentasInternas(ultimoDatos && ultimoDatos.cuentasInternas)
+  })
+  document.getElementById('btnAlertas').addEventListener('click', abrirAlertas)
+  document.getElementById('btnCerrarAlertas').addEventListener('click', cerrarAlertas)
+  document.getElementById('alertasOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'alertasOverlay') cerrarAlertas()
   })
   document.getElementById('btnCalcularAlertas').addEventListener('click', calcularAlertas)
   document.getElementById('filtroAlertas').addEventListener('input', renderAlertasTabla)

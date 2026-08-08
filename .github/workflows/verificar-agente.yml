@@ -1,0 +1,19 @@
+name: Verificar agente de la tienda
+
+# Dispara api/verificar-agente.js cada 15 min -- el cron nativo de Vercel en
+# el plan gratuito solo permite una corrida por día, no alcanza. La lógica
+# de horario (10:30 a 21:00, hora de Santiago) y de no repetir el mismo
+# aviso vive en la propia función, no acá -- este workflow solo toca timbre
+# seguido, la función decide si hace algo.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar a /api/verificar-agente
+        run: |
+          curl -sf "https://reportes-pdv-web.vercel.app/api/verificar-agente?secret=${{ secrets.CRON_SECRET }}"

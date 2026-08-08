@@ -295,6 +295,100 @@ export function renderLineChart(container, filas, { money, num }) {
 }
 
 // ---------------------------------------------------------------------------
+// Margen bruto % -- tendencia histórica (mismo eje X que renderLineChart,
+// eje Y en % en vez de dinero). Copia deliberada de renderLineChart en vez
+// de generalizarla con un parámetro más -- son pocas líneas y mantiene cada
+// gráfico legible por separado, mismo criterio que ya usa este archivo para
+// renderAuditoriaTendenciaChart.
+// ---------------------------------------------------------------------------
+export function renderMargenChart(container, filas, { pct }) {
+  container.innerHTML = ''
+  if (!filas || !filas.length) { container.appendChild(elEmpty('Todavía no hay suficiente histórico guardado.')); return }
+
+  const wrap = document.createElement('div')
+  wrap.className = 'chart-wrap'
+  container.appendChild(wrap)
+
+  const width = Math.max(320, wrap.clientWidth || container.clientWidth || 600)
+  const height = 240
+  const margin = { top: 16, right: 16, bottom: 34, left: 56 }
+  const plotW = width - margin.left - margin.right
+  const plotH = height - margin.top - margin.bottom
+
+  const valores = filas.map((f) => (f.resumen || {}).margenPct || 0)
+  // Eje Y en % -- niceTicks() está pensado para pesos, pero funciona igual
+  // de bien con cualquier escala numérica (solo redondea a pasos "lindos").
+  const maxVal = Math.max(...valores, 10)
+  const { ticks, top } = niceTicks(maxVal)
+
+  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: 'xMinYMin meet', role: 'img', 'aria-label': 'Margen bruto % histórico' })
+  const y = ejes(svg, { margin, width, height, plotW, plotH, ticks, top, money: pct })
+
+  const n = filas.length
+  const x = (i) => margin.left + (n === 1 ? plotW / 2 : (plotW * i) / (n - 1))
+
+  const points = valores.map((v, i) => [x(i), y(v)])
+  const linePath = points.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')
+
+  svg.appendChild(svgEl('path', { d: linePath, class: 'chart-line', fill: 'none' }))
+
+  decimatedIndices(n, plotW).forEach((i) => {
+    const label = svgEl('text', { x: x(i), y: height - margin.bottom + 20, class: 'chart-axis-label', 'text-anchor': 'middle' })
+    label.textContent = fechaLabel(filas[i].fecha)
+    svg.appendChild(label)
+  })
+
+  const crosshair = svgEl('line', { y1: margin.top, y2: margin.top + plotH, class: 'chart-crosshair' })
+  crosshair.style.display = 'none'
+  const dot = svgEl('circle', { r: 5, class: 'chart-dot' })
+  dot.style.display = 'none'
+  svg.appendChild(crosshair)
+  svg.appendChild(dot)
+
+  const hitRect = svgEl('rect', { x: margin.left, y: margin.top, width: plotW, height: plotH, class: 'chart-hit' })
+  svg.appendChild(hitRect)
+
+  wrap.appendChild(svg)
+  const tooltip = makeTooltip(wrap, svg, width, height)
+
+  function nearestIndex(px) {
+    let idx = 0, best = Infinity
+    for (let i = 0; i < n; i++) {
+      const d = Math.abs(x(i) - px)
+      if (d < best) { best = d; idx = i }
+    }
+    return idx
+  }
+
+  function onMove(evt) {
+    const rect = svg.getBoundingClientRect()
+    const px = (evt.clientX - rect.left) * (width / rect.width)
+    const i = nearestIndex(px)
+    const cx = x(i), cy = y(valores[i])
+    crosshair.setAttribute('x1', cx)
+    crosshair.setAttribute('x2', cx)
+    crosshair.style.display = ''
+    dot.setAttribute('cx', cx)
+    dot.setAttribute('cy', cy)
+    dot.style.display = ''
+    const f = filas[i]
+    tooltip.show([
+      [fechaLabelLarga(f.fecha), '', true],
+      ['Margen bruto', pct(valores[i])],
+    ], cx, cy)
+  }
+  function onLeave() {
+    crosshair.style.display = 'none'
+    dot.style.display = 'none'
+    tooltip.hide()
+  }
+
+  hitRect.addEventListener('pointermove', onMove)
+  hitRect.addEventListener('pointerdown', onMove)
+  hitRect.addEventListener('pointerleave', onLeave)
+}
+
+// ---------------------------------------------------------------------------
 // Auditoría de compra -- tendencia agregada de una marca, 3 barras.
 // ---------------------------------------------------------------------------
 export function renderAuditoriaTendenciaChart(container, buckets, { num }) {

@@ -278,6 +278,16 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .cashflow-kpi .lbl { font-size: 13px; color: var(--brand-primary); font-weight: 600; margin-bottom: 4px; }
 .cashflow-kpi .val { font-size: 24px; font-weight: 800; color: var(--brand-primary); letter-spacing: -0.5px;}
 
+/* ---------------- Meta de venta mensual ---------------- */
+.meta-venta-form { display: flex; gap: 12px; align-items: center; padding: 20px 24px; flex-wrap: wrap; }
+.meta-venta-form input { flex: 1; min-width: 180px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; }
+.meta-venta-progreso { padding: 20px 24px; }
+.meta-venta-cifras { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; font-weight: 700; color: var(--text-main); }
+.meta-venta-pct { font-size: 20px; color: var(--brand-card); }
+.meta-venta-barra { height: 14px; background: var(--brand-light); border-radius: 999px; overflow: hidden; }
+.meta-venta-barra-fill { height: 100%; background: var(--brand-card); border-radius: 999px; transition: width 0.3s ease; }
+.meta-venta-falta { margin-top: 8px; font-size: 13px; color: var(--text-muted); }
+
 /* ---------------- Overlay Auditoría Premium ---------------- */
 .auditoria-overlay {
   position: fixed; inset: 0; background: rgba(17, 34, 24, 0.6); backdrop-filter: blur(4px);
@@ -368,4 +378,21 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 @media (max-width: 640px) {
   .auditoria-kpis-grid { grid-template-columns: repeat(2, 1fr); }
   .kpis { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Vista de impresión (2026-08-08) -- oculta todo lo que no tiene sentido en
+   papel (sidebar, filtros interactivos, botones, overlays) y deja el
+   contenido a ancho completo, en blanco y negro, sin sombras. */
+@media print {
+  .sidebar, .topbar-filters, .card-actions, .table-controls,
+  #agenteBanner, #vivoBanner, #rangoBanner,
+  .btn, button, .auditoria-overlay, .search-input-wrap, .meta-venta-form {
+    display: none !important;
+  }
+  body, .app-layout { background: #fff; }
+  .main-wrapper { margin-left: 0; }
+  .content-area { padding: 0; }
+  .card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+  .kpis { break-inside: avoid; }
+  table { font-size: 11px; }
 }

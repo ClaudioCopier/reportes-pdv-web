@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { renderBarChart, renderLineChart, renderAuditoriaTendenciaChart } from './chart.js'
+import { renderBarChart, renderLineChart, renderMargenChart, renderAuditoriaTendenciaChart } from './chart.js'
 
 // El cliente de Supabase se crea recién después de un login válido: la
 // URL/clave las entrega el servidor (/api/entrar) sólo cuando la clave de
@@ -191,11 +191,77 @@ function renderKpis(data) {
 }
 
 // ---------------------------------------------------------------------------
+// Meta de venta mensual -- editable, solo tiene sentido viendo "Este mes"
+// (comparar contra un objetivo mensual en cualquier otro rango no significa
+// nada). El progreso se recalcula contra datos.resumen.total de lo que ya
+// esté pintado, nunca pide nada aparte a Supabase.
+// ---------------------------------------------------------------------------
+let metaVentaMonto = null
+
+function mesActualKey() {
+  const d = new Date()
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+}
+
+async function cargarMetaVenta() {
+  const { data } = await supabase.from('metas_venta').select('monto').eq('mes', mesActualKey()).maybeSingle()
+  metaVentaMonto = data ? Number(data.monto) : null
+}
+
+async function guardarMetaVenta(monto) {
+  const { error } = await supabase.from('metas_venta').upsert({ mes: mesActualKey(), monto, actualizado_en: new Date().toISOString() }, { onConflict: 'mes' })
+  if (error) { alert('No se pudo guardar la meta: ' + error.message); return }
+  metaVentaMonto = monto
+  if (ultimoDatos) renderMetaVenta(ultimoDatos)
+}
+
+function renderMetaVenta(datos) {
+  const card = document.getElementById('metaVentaCard')
+  const body = document.getElementById('metaVentaBody')
+  const esEsteMes = modo === 'rapido' && claveActual === 'mes'
+  if (!esEsteMes) { card.style.display = 'none'; return }
+  card.style.display = ''
+  body.innerHTML = ''
+
+  if (metaVentaMonto === null) {
+    body.appendChild(el(`
+      <div class="meta-venta-form">
+        <input type="number" id="metaVentaInput" placeholder="Ej: 8000000" min="0" step="1">
+        <button id="btnGuardarMeta" class="btn btn-primary btn-sm">Guardar meta de ${new Date().toLocaleDateString('es-CL', { month: 'long' })}</button>
+      </div>
+    `))
+    document.getElementById('btnGuardarMeta').addEventListener('click', () => {
+      const v = Number(document.getElementById('metaVentaInput').value)
+      if (!v || v <= 0) { alert('Ingresá un monto válido.'); return }
+      guardarMetaVenta(v)
+    })
+    return
+  }
+
+  const actual = datos.resumen.total
+  const pctAvance = metaVentaMonto > 0 ? Math.min(100, (actual / metaVentaMonto) * 100) : 0
+  const falta = Math.max(0, metaVentaMonto - actual)
+  body.appendChild(el(`
+    <div class="meta-venta-progreso">
+      <div class="meta-venta-cifras">
+        <span>${money(actual)} de ${money(metaVentaMonto)}</span>
+        <span class="meta-venta-pct">${dec(pctAvance, 1)}%</span>
+      </div>
+      <div class="meta-venta-barra"><div class="meta-venta-barra-fill" style="width:${pctAvance}%"></div></div>
+      <div class="meta-venta-falta">${falta > 0 ? `Faltan ${money(falta)} para llegar a la meta.` : '¡Meta alcanzada! 🎉'}</div>
+      <button id="btnEditarMeta" class="btn btn-outline btn-sm" style="margin-top:8px;">Editar meta</button>
+    </div>
+  `))
+  document.getElementById('btnEditarMeta').addEventListener('click', () => { metaVentaMonto = null; renderMetaVenta(datos) })
+}
+
+// ---------------------------------------------------------------------------
 // Tendencia histórica -- todo reportes_ventas_historico, independiente del
 // periodo seleccionado arriba.
 // ---------------------------------------------------------------------------
 async function cargarTendencia() {
   const box = document.getElementById('chartTendencia')
+  const boxMargen = document.getElementById('chartMargen')
   const { data, error } = await supabase
     .from('reportes_ventas_historico')
     .select('fecha, resumen:datos->resumen')
@@ -209,6 +275,7 @@ async function cargarTendencia() {
     return
   }
   renderLineChart(box, data || [], { money, num })
+  renderMargenChart(boxMargen, data || [], { pct })
 }
 
 // ---------------------------------------------------------------------------
@@ -375,6 +442,79 @@ function renderCuentasInternas(internas) {
 }
 
 // ---------------------------------------------------------------------------
+// Comparativo interanual -- este periodo vs. el mismo periodo, un año antes.
+// ---------------------------------------------------------------------------
+function renderComparativoInteranual(cmp) {
+  const box = document.getElementById('comparativoInteranual')
+  box.innerHTML = ''
+  if (!cmp) {
+    box.appendChild(el('<div class="empty">No disponible para rangos personalizados -- usá los rangos rápidos de arriba.</div>'))
+    return
+  }
+  if (cmp.sinDatosPrevios) {
+    box.appendChild(el(`<div class="empty">Sin ventas registradas del ${cmp.periodoAnteriorDesde} al ${cmp.periodoAnteriorHasta} -- todavía no hay con qué comparar ese periodo.</div>`))
+    return
+  }
+  const cards = [
+    { label: 'Ventas', value: money(cmp.actual.total), sub: compareSub(cmp.actual.total, cmp.previo.total) },
+    { label: 'Ganancia bruta', value: money(cmp.actual.gananciaBruta), sub: compareSub(cmp.actual.gananciaBruta, cmp.previo.gananciaBruta) },
+    { label: 'Tickets', value: num(cmp.actual.tickets), sub: compareSub(cmp.actual.tickets, cmp.previo.tickets) },
+  ]
+  const grid = el('<div class="kpis"></div>')
+  cards.forEach((c) => grid.appendChild(el(`
+    <div class="kpi-card">
+      <div class="kpi-label">${c.label}</div>
+      <div class="kpi-value">${c.value}</div>
+      ${c.sub || ''}
+    </div>
+  `)))
+  box.appendChild(grid)
+  box.appendChild(el(`<p class="hint-header" style="padding: 8px 0 0;">Comparado contra ${cmp.periodoAnteriorDesde} a ${cmp.periodoAnteriorHasta}.</p>`))
+}
+
+// ---------------------------------------------------------------------------
+// Devoluciones y anulaciones -- oculto detrás de un botón, no es para
+// mirar todos los días (mismo patrón que Cuentas internas).
+// ---------------------------------------------------------------------------
+let devolucionesVisibles = false
+
+function renderDevoluciones(devoluciones) {
+  const btn = document.getElementById('btnToggleDevoluciones')
+  const boxResumen = document.getElementById('devolucionesResumen')
+  const boxDetalle = document.getElementById('devolucionesDetalle')
+
+  const datos = devoluciones || { ticketsAnulados: [], lineasDevueltas: [], totalAnulado: 0, totalDevuelto: 0 }
+  const totalMovimientos = datos.ticketsAnulados.length + datos.lineasDevueltas.length
+  btn.textContent = `${devolucionesVisibles ? 'Ocultar' : 'Ver detalle'} (${totalMovimientos}, ${money(datos.totalAnulado + datos.totalDevuelto)})`
+
+  boxResumen.style.display = devolucionesVisibles ? '' : 'none'
+  boxDetalle.style.display = devolucionesVisibles ? '' : 'none'
+  if (!devolucionesVisibles) return
+
+  renderTable('devolucionesResumen',
+    [{ label: 'Concepto' }, { label: 'Cantidad', num: true }, { label: 'Total', num: true }],
+    [
+      { concepto: 'Tickets anulados', cantidad: datos.ticketsAnulados.length, total: datos.totalAnulado },
+      { concepto: 'Líneas devueltas', cantidad: datos.lineasDevueltas.length, total: datos.totalDevuelto },
+    ],
+    (r) => `<tr><td>${r.concepto}</td><td class="num">${num(r.cantidad)}</td><td class="num">${money(r.total)}</td></tr>`,
+    'Sin movimientos en este periodo.'
+  )
+
+  const filasDetalle = [
+    ...datos.ticketsAnulados.map((t) => ({ tipo: 'Ticket anulado', vendidoEn: t.vendidoEn, cajero: t.cajero, detalle: `Folio ${t.folio}`, monto: t.total })),
+    ...datos.lineasDevueltas.map((l) => ({ tipo: l.devolucionTotal ? 'Devolución total' : 'Devolución parcial', vendidoEn: l.vendidoEn, cajero: l.cajero, detalle: `${l.nombre} ×${dec(l.cantidadDevuelta, 2)}`, monto: l.montoDevuelto })),
+  ].sort((a, b) => new Date(b.vendidoEn) - new Date(a.vendidoEn))
+
+  renderTable('devolucionesDetalle',
+    [{ label: 'Tipo' }, { label: 'Fecha' }, { label: 'Cajero' }, { label: 'Detalle' }, { label: 'Monto', num: true }],
+    filasDetalle,
+    (f) => `<tr><td>${f.tipo}</td><td>${new Date(f.vendidoEn).toLocaleString('es-CL')}</td><td>${f.cajero}</td><td>${f.detalle}</td><td class="num">${money(f.monto)}</td></tr>`,
+    'Sin movimientos en este periodo.'
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Aviso de datos en vivo (hoy, reconstruidos del log del POS)
 // ---------------------------------------------------------------------------
 function renderVivoBanner(info) {
@@ -509,6 +649,15 @@ function combinarDias(dias) {
     total: movimientosInternas.reduce((s, m) => s + m.total, 0),
   }
 
+  const ticketsAnulados = dias.flatMap((d) => (d.datos.devoluciones || {}).ticketsAnulados || [])
+  const lineasDevueltas = dias.flatMap((d) => (d.datos.devoluciones || {}).lineasDevueltas || [])
+  const devoluciones = {
+    ticketsAnulados: ticketsAnulados.sort((a, b) => new Date(b.vendidoEn) - new Date(a.vendidoEn)),
+    lineasDevueltas: lineasDevueltas.sort((a, b) => new Date(b.vendidoEn) - new Date(a.vendidoEn)),
+    totalAnulado: ticketsAnulados.reduce((s, t) => s + t.total, 0),
+    totalDevuelto: lineasDevueltas.reduce((s, l) => s + l.montoDevuelto, 0),
+  }
+
   const ultimoVivo = dias[n - 1].datos.datosEnVivo
   return {
     periodo: { desde: dias[0].fecha, hasta: dias[n - 1].fecha },
@@ -523,6 +672,11 @@ function combinarDias(dias) {
     stockBajo: [],
     flujoCaja,
     cuentasInternas,
+    devoluciones,
+    // No es sumable entre días de forma sensata (es una comparación de
+    // periodo, no una métrica aditiva) -- se oculta en la UI para rango
+    // personalizado, mismo criterio que ya usa resumenAnterior/stockBajo.
+    comparativoInteranual: null,
   }
 }
 
@@ -594,6 +748,9 @@ function pintar(datos) {
   ultimoDatos = datos
   renderVivoBanner(datos.datosEnVivo)
   renderKpis(datos)
+  renderComparativoInteranual(datos.comparativoInteranual)
+  renderDevoluciones(datos.devoluciones)
+  renderMetaVenta(datos)
   renderBarChart(document.getElementById('chartVentas'), datos.ventasDiarias, { money, num })
 
   rotacionData = datos.rotacionProductos
@@ -1122,6 +1279,11 @@ function initApp() {
     internasVisibles = !internasVisibles
     renderCuentasInternas(ultimoDatos && ultimoDatos.cuentasInternas)
   })
+  document.getElementById('btnToggleDevoluciones').addEventListener('click', () => {
+    devolucionesVisibles = !devolucionesVisibles
+    renderDevoluciones(ultimoDatos && ultimoDatos.devoluciones)
+  })
+  document.getElementById('btnImprimir').addEventListener('click', () => window.print())
   document.getElementById('btnAlertas').addEventListener('click', abrirAlertas)
   document.getElementById('btnCerrarAlertas').addEventListener('click', cerrarAlertas)
   document.getElementById('alertasOverlay').addEventListener('click', (e) => {
@@ -1134,7 +1296,10 @@ function initApp() {
   cargarTendencia()
   cargarSalud()
   cargarUltimaAlerta()
-  cargar()
+  // Esperada antes de cargar() -- si no, pintar() puede correr antes de que
+  // se sepa si ya existe una meta guardada, y muestra el formulario "cargar
+  // meta" un instante de más aunque ya haya una.
+  cargarMetaVenta().then(cargar)
 }
 
 iniciarGate()

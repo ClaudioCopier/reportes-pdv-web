@@ -52,6 +52,9 @@
       <button id="btnExportarDashboard" class="nav-item">
         <span class="icon">📥</span> Exportar a Excel
       </button>
+      <button id="btnImprimir" class="nav-item">
+        <span class="icon">🖨️</span> Vista de impresión
+      </button>
 
       <div class="nav-section" style="margin-top: 24px;">Cuenta</div>
       <button id="btnCerrarSesion" class="nav-item">
@@ -86,6 +89,14 @@
       <!-- KPIs -->
       <section class="kpis" id="kpis"></section>
 
+      <!-- Meta de venta del mes -- solo visible viendo "Este mes" -->
+      <section class="card" id="metaVentaCard" style="display:none">
+        <div class="card-header">
+          <h2>Meta de venta -- este mes</h2>
+        </div>
+        <div id="metaVentaBody"></div>
+      </section>
+
       <!-- Gráficos Principales -->
       <section class="card">
         <div class="card-header">
@@ -101,6 +112,31 @@
         </div>
         <p class="hint-header">Evolución del total vendido por día, de todo el historial disponible (independiente del periodo seleccionado arriba).</p>
         <div id="chartTendencia" class="chart"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>Margen bruto -- tendencia histórica</h2>
+        </div>
+        <p class="hint-header">Margen bruto % por día, de todo el historial disponible -- para notar si se vende más pero se gana menos, algo que "Tendencia histórica" (arriba) no muestra por sí sola.</p>
+        <div id="chartMargen" class="chart"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>Este mes vs. el mismo mes, el año pasado</h2>
+        </div>
+        <div id="comparativoInteranual"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>Devoluciones y anulaciones</h2>
+          <button id="btnToggleDevoluciones" class="btn btn-outline btn-sm">Ver detalle</button>
+        </div>
+        <p class="hint-header">Ventas anuladas y líneas devueltas del periodo seleccionado -- ninguna de estas cuenta en los totales de venta de arriba (correcto), esto es para poder revisarlas aparte.</p>
+        <div id="devolucionesResumen" class="table-wrap" style="display:none"></div>
+        <div id="devolucionesDetalle" class="table-wrap scroll-y-big" style="display:none"></div>
       </section>
 
       <!-- Rotación -->

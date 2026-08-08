@@ -160,6 +160,47 @@ function hojaCuentasInternas(wb, internas) {
   }
 }
 
+function hojaDevoluciones(wb, devoluciones) {
+  const hoja = wb.addWorksheet('Devoluciones')
+  hoja.columns = [
+    { header: 'Tipo', key: 'tipo', width: 20 },
+    { header: 'Fecha', key: 'fecha', width: 20 },
+    { header: 'Cajero', key: 'cajero', width: 20 },
+    { header: 'Detalle', key: 'detalle', width: 40 },
+    { header: 'Monto', key: 'monto', width: 14 },
+  ]
+  estilarHeader(hoja)
+  const d = devoluciones || { ticketsAnulados: [], lineasDevueltas: [] }
+  for (const t of d.ticketsAnulados) {
+    hoja.addRow({ tipo: 'Ticket anulado', fecha: new Date(t.vendidoEn).toLocaleString('es-CL'), cajero: t.cajero, detalle: `Folio ${t.folio}`, monto: t.total })
+  }
+  for (const l of d.lineasDevueltas) {
+    hoja.addRow({
+      tipo: l.devolucionTotal ? 'Devolución total' : 'Devolución parcial',
+      fecha: new Date(l.vendidoEn).toLocaleString('es-CL'), cajero: l.cajero,
+      detalle: `${l.nombre} x${l.cantidadDevuelta}`, monto: l.montoDevuelto,
+    })
+  }
+}
+
+function hojaInteranual(wb, cmp) {
+  if (!cmp) return
+  const hoja = wb.addWorksheet('Vs. año pasado')
+  hoja.columns = [
+    { header: 'Métrica', key: 'metrica', width: 22 },
+    { header: 'Este periodo', key: 'actual', width: 18 },
+    { header: `${cmp.periodoAnteriorDesde} a ${cmp.periodoAnteriorHasta}`, key: 'previo', width: 24 },
+  ]
+  estilarHeader(hoja)
+  if (cmp.sinDatosPrevios) {
+    hoja.addRow({ metrica: 'Sin ventas registradas en el periodo del año pasado.' })
+    return
+  }
+  hoja.addRow({ metrica: 'Ventas', actual: cmp.actual.total, previo: cmp.previo.total })
+  hoja.addRow({ metrica: 'Ganancia bruta', actual: cmp.actual.gananciaBruta, previo: cmp.previo.gananciaBruta })
+  hoja.addRow({ metrica: 'Tickets', actual: cmp.actual.tickets, previo: cmp.previo.tickets })
+}
+
 export async function exportarDashboardExcel(datos, { modoRango = false } = {}) {
   const ExcelJS = (await import('exceljs')).default
   const wb = new ExcelJS.Workbook()
@@ -173,6 +214,8 @@ export async function exportarDashboardExcel(datos, { modoRango = false } = {}) 
   hojaStockBajo(wb, datos.stockBajo, modoRango)
   hojaFlujoCaja(wb, datos.flujoCaja)
   hojaCuentasInternas(wb, datos.cuentasInternas)
+  hojaDevoluciones(wb, datos.devoluciones)
+  hojaInteranual(wb, datos.comparativoInteranual)
 
   const buffer = await wb.xlsx.writeBuffer()
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })

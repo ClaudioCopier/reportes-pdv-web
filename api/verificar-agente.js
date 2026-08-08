@@ -29,13 +29,36 @@ function horaLocalSantiago() {
   return hora + minuto / 60;
 }
 
+// Dos destinatarios posibles (2026-08-08) -- mismo patrón que
+// agente-servidor/lib/whatsapp.js. El segundo es opcional.
+function destinatarios() {
+  const lista = [];
+  if (process.env.CALLMEBOT_PHONE && process.env.CALLMEBOT_APIKEY) {
+    lista.push({ phone: process.env.CALLMEBOT_PHONE, apikey: process.env.CALLMEBOT_APIKEY });
+  }
+  if (process.env.CALLMEBOT_PHONE2 && process.env.CALLMEBOT_APIKEY2) {
+    lista.push({ phone: process.env.CALLMEBOT_PHONE2, apikey: process.env.CALLMEBOT_APIKEY2 });
+  }
+  return lista;
+}
+
 async function enviarWhatsapp(mensaje) {
-  const phone = process.env.CALLMEBOT_PHONE;
-  const apikey = process.env.CALLMEBOT_APIKEY;
-  if (!phone || !apikey) throw new Error('Faltan CALLMEBOT_PHONE/CALLMEBOT_APIKEY en el servidor.');
-  const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(mensaje)}&apikey=${encodeURIComponent(apikey)}`;
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`CallMeBot respondió ${resp.status}: ${await resp.text()}`);
+  const dest = destinatarios();
+  if (!dest.length) throw new Error('Faltan CALLMEBOT_PHONE/CALLMEBOT_APIKEY en el servidor.');
+  const errores = [];
+  for (const { phone, apikey } of dest) {
+    const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(mensaje)}&apikey=${encodeURIComponent(apikey)}`;
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) errores.push(`${phone}: CallMeBot respondió ${resp.status}`);
+    } catch (e) {
+      errores.push(`${phone}: ${e.message}`);
+    }
+  }
+  // Si al menos uno salió bien, no se considera un fallo total -- pero se
+  // deja registro de cuál falló, no queda en silencio.
+  if (errores.length === dest.length) throw new Error(errores.join(' | '));
+  if (errores.length) console.error('Fallo parcial mandando WhatsApp:', errores.join(' | '));
 }
 
 export default async function handler(req, res) {

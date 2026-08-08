@@ -659,6 +659,25 @@ async function cargar() {
 }
 
 // ---------------------------------------------------------------------------
+// Exportar el dashboard completo a Excel -- usa lo ya cargado en memoria
+// (ultimoDatos), no vuelve a pedir nada a Supabase.
+// ---------------------------------------------------------------------------
+async function exportarDashboard() {
+  const statusEl = document.getElementById('status')
+  if (!ultimoDatos) { statusEl.textContent = 'Todavía no hay datos cargados para exportar.'; return }
+  const btn = document.getElementById('btnExportarDashboard')
+  btn.disabled = true
+  try {
+    const { exportarDashboardExcel } = await import('./lib/exportarDashboardExcel.js')
+    await exportarDashboardExcel(ultimoDatos, { modoRango: modo === 'rango' })
+  } catch (err) {
+    statusEl.textContent = 'No se pudo exportar: ' + err.message
+  } finally {
+    btn.disabled = false
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Actualizar ahora -- inserta una fila en reportes_solicitudes y espera a
 // que el agente la procese antes de releer los datos frescos.
 // ---------------------------------------------------------------------------
@@ -1073,6 +1092,7 @@ function initApp() {
   markActiveQuick()
 
   document.getElementById('btnRefresh').addEventListener('click', solicitarActualizacion)
+  document.getElementById('btnExportarDashboard').addEventListener('click', exportarDashboard)
   document.getElementById('btnCerrarSesion').addEventListener('click', cerrarSesion)
   document.getElementById('btnAuditoria').addEventListener('click', abrirAuditoria)
   document.getElementById('btnCerrarAuditoria').addEventListener('click', cerrarAuditoria)

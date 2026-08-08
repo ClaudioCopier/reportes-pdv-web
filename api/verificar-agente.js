@@ -43,7 +43,13 @@ export default async function handler(req, res) {
   // (no podría forzar un aviso falso -- el estado sale de Supabase, no del
   // request -- pero sí podría gastar la cuota de CallMeBot en un apagón
   // real). Mismo secreto que configura el workflow de GitHub Actions.
-  if (req.query.secret !== process.env.CRON_SECRET) {
+  // "fail closed": si CRON_SECRET no está configurado todavía en Vercel,
+  // req.query.secret (undefined, sin ?secret= en la URL) y
+  // process.env.CRON_SECRET (undefined) quedarían "iguales" -- bug real
+  // encontrado probando en producción el mismo día: sin esta primera
+  // condición, cualquiera podía llamar al endpoint sin ningún secreto
+  // mientras la variable no estuviera cargada.
+  if (!process.env.CRON_SECRET || req.query.secret !== process.env.CRON_SECRET) {
     res.status(401).json({ ok: false, error: 'No autorizado' });
     return;
   }

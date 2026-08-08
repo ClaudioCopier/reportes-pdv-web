@@ -42,6 +42,16 @@ function activarSesion(supabaseUrl, supabaseAnonKey) {
   initApp()
 }
 
+// Borra la sesión cacheada y vuelve a pedir la clave -- para cuando alguien
+// quiera cerrar sesión sin tener que cerrar el navegador entero (2026-08-08).
+function cerrarSesion() {
+  sessionStorage.removeItem(SESION_KEY)
+  supabase = null
+  document.getElementById('appRoot').style.display = 'none'
+  document.getElementById('gate').style.display = 'flex'
+  document.getElementById('gateClave').value = ''
+}
+
 function iniciarGate() {
   const guardado = sessionStorage.getItem(SESION_KEY)
   if (guardado) {
@@ -1063,6 +1073,7 @@ function initApp() {
   markActiveQuick()
 
   document.getElementById('btnRefresh').addEventListener('click', solicitarActualizacion)
+  document.getElementById('btnCerrarSesion').addEventListener('click', cerrarSesion)
   document.getElementById('btnAuditoria').addEventListener('click', abrirAuditoria)
   document.getElementById('btnCerrarAuditoria').addEventListener('click', cerrarAuditoria)
   document.getElementById('auditoriaOverlay').addEventListener('click', (e) => {

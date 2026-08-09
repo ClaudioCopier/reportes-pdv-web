@@ -930,8 +930,15 @@ function renderAlertasPanel(datos, margenNegativoLista, esRango) {
     if (c.ancla) {
       chip.style.cursor = 'pointer'
       chip.addEventListener('click', () => {
-        cerrarAlertasPanel()
-        document.getElementById(c.ancla)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        const destino = document.getElementById(c.ancla)
+        if (!destino) return
+        const dentroDelPanel = ['stockBajo', 'margenNegativoCard', 'stockMuertoCard'].includes(c.ancla)
+        if (dentroDelPanel) {
+          destino.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        } else {
+          cerrarAlertasPanel()
+          destino.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
       })
     }
     body.appendChild(chip)

@@ -171,40 +171,10 @@
         </section>
       </div>
 
-      <div class="grid-2">
-        <section class="card">
-          <div class="card-header"><h2>Ventas por cajero</h2></div>
-          <div id="ventasPorCajero" class="table-wrap"></div>
-        </section>
-
-        <section class="card">
-          <div class="card-header alert-header">
-            <h2>⚠ Productos con stock bajo</h2>
-            <span id="stockCount" class="badge"></span>
-          </div>
-          <div id="stockBajo" class="table-wrap scroll-y"></div>
-        </section>
-      </div>
-
-      <div class="grid-2">
-        <section class="card" id="margenNegativoCard">
-          <div class="card-header alert-header">
-            <h2>📉 Productos con margen negativo</h2>
-            <span id="margenNegativoCount" class="badge"></span>
-          </div>
-          <p class="hint-header">Productos que se vendieron perdiendo plata en el periodo seleccionado (costo mayor al ingreso) -- candidatos a revisar el precio.</p>
-          <div id="margenNegativo" class="table-wrap scroll-y"></div>
-        </section>
-
-        <section class="card" id="stockMuertoCard">
-          <div class="card-header alert-header">
-            <h2>💤 Stock sin vender hace 90+ días</h2>
-            <span id="stockMuertoCount" class="badge"></span>
-          </div>
-          <p class="hint-header">Productos con stock cargado que no tuvieron ninguna venta en los últimos 90 días -- candidatos a liquidar, promocionar o descontinuar. Ordenado por capital inmovilizado (existencia × costo).</p>
-          <div id="stockMuerto" class="table-wrap scroll-y"></div>
-        </section>
-      </div>
+      <section class="card">
+        <div class="card-header"><h2>Ventas por cajero</h2></div>
+        <div id="ventasPorCajero" class="table-wrap"></div>
+      </section>
 
       <section class="card">
         <div class="card-header">
@@ -241,6 +211,32 @@
     </div>
     <div class="auditoria-body">
       <div id="alertasPanelBody" class="alertas-panel-body"></div>
+
+      <section class="card" id="stockBajoCard">
+        <div class="card-header alert-header">
+          <h2>⚠ Productos con stock bajo</h2>
+          <span id="stockCount" class="badge"></span>
+        </div>
+        <div id="stockBajo" class="table-wrap scroll-y"></div>
+      </section>
+
+      <section class="card" id="margenNegativoCard">
+        <div class="card-header alert-header">
+          <h2>📉 Productos con margen negativo</h2>
+          <span id="margenNegativoCount" class="badge"></span>
+        </div>
+        <p class="hint-header">Productos que se vendieron perdiendo plata en el periodo seleccionado (costo mayor al ingreso) -- candidatos a revisar el precio.</p>
+        <div id="margenNegativo" class="table-wrap scroll-y"></div>
+      </section>
+
+      <section class="card" id="stockMuertoCard">
+        <div class="card-header alert-header">
+          <h2>💤 Stock sin vender hace 90+ días</h2>
+          <span id="stockMuertoCount" class="badge"></span>
+        </div>
+        <p class="hint-header">Productos con stock cargado que no tuvieron ninguna venta en los últimos 90 días -- candidatos a liquidar, promocionar o descontinuar. Ordenado por capital inmovilizado (existencia × costo).</p>
+        <div id="stockMuerto" class="table-wrap scroll-y"></div>
+      </section>
     </div>
   </div>
 </div>

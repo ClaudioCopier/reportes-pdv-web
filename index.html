@@ -212,14 +212,6 @@
     <div class="auditoria-body">
       <div id="alertasPanelBody" class="alertas-panel-body"></div>
 
-      <section class="card" id="stockBajoCard">
-        <div class="card-header alert-header">
-          <h2>⚠ Productos con stock bajo</h2>
-          <span id="stockCount" class="badge"></span>
-        </div>
-        <div id="stockBajo" class="table-wrap scroll-y"></div>
-      </section>
-
       <section class="card" id="margenNegativoCard">
         <div class="card-header alert-header">
           <h2>📉 Productos con margen negativo</h2>
@@ -228,15 +220,38 @@
         <p class="hint-header">Productos que se vendieron perdiendo plata en el periodo seleccionado (costo mayor al ingreso) -- candidatos a revisar el precio.</p>
         <div id="margenNegativo" class="table-wrap scroll-y"></div>
       </section>
+    </div>
+  </div>
+</div>
 
-      <section class="card" id="stockMuertoCard">
-        <div class="card-header alert-header">
-          <h2>💤 Stock sin vender hace 90+ días</h2>
-          <span id="stockMuertoCount" class="badge"></span>
-        </div>
-        <p class="hint-header">Productos con stock cargado que no tuvieron ninguna venta en los últimos 90 días -- candidatos a liquidar, promocionar o descontinuar. Ordenado por capital inmovilizado (existencia × costo).</p>
-        <div id="stockMuerto" class="table-wrap scroll-y"></div>
-      </section>
+<!-- STOCK BAJO: LISTA COMPLETA (se abre desde el chip del panel de alertas) -->
+<div id="stockBajoOverlay" class="auditoria-overlay" style="display:none">
+  <div class="auditoria-panel">
+    <div class="auditoria-panel-header">
+      <div>
+        <h2>⚠ Productos con stock bajo <span id="stockCount" class="badge" style="vertical-align: middle; margin-left: 8px;"></span></h2>
+        <p class="subtitle">Existencia actual por debajo del mínimo cargado en el POS.</p>
+      </div>
+      <button id="btnCerrarStockBajo" class="btn-close" aria-label="Cerrar" type="button">✕</button>
+    </div>
+    <div class="auditoria-body">
+      <div id="stockBajo" class="table-wrap scroll-y-big"></div>
+    </div>
+  </div>
+</div>
+
+<!-- STOCK MUERTO: LISTA COMPLETA (se abre desde el chip del panel de alertas) -->
+<div id="stockMuertoOverlay" class="auditoria-overlay" style="display:none">
+  <div class="auditoria-panel">
+    <div class="auditoria-panel-header">
+      <div>
+        <h2>💤 Stock sin vender hace 90+ días <span id="stockMuertoCount" class="badge" style="vertical-align: middle; margin-left: 8px;"></span></h2>
+        <p class="subtitle">Productos con stock cargado que no tuvieron ninguna venta en los últimos 90 días -- candidatos a liquidar, promocionar o descontinuar. Ordenado por capital inmovilizado (existencia × costo).</p>
+      </div>
+      <button id="btnCerrarStockMuerto" class="btn-close" aria-label="Cerrar" type="button">✕</button>
+    </div>
+    <div class="auditoria-body">
+      <div id="stockMuerto" class="table-wrap scroll-y-big"></div>
     </div>
   </div>
 </div>

@@ -927,13 +927,18 @@ function renderAlertasPanel(datos, margenNegativoLista, esRango) {
   body.innerHTML = ''
   chips.forEach((c) => {
     const chip = el(`<div class="alerta-chip alerta-chip-${c.tipo}">${c.texto}</div>`)
-    if (c.ancla) {
+    if (c.ancla === 'stockBajo') {
+      chip.style.cursor = 'pointer'
+      chip.addEventListener('click', () => abrirStockBajoOverlay())
+    } else if (c.ancla === 'stockMuertoCard') {
+      chip.style.cursor = 'pointer'
+      chip.addEventListener('click', () => abrirStockMuertoOverlay())
+    } else if (c.ancla) {
       chip.style.cursor = 'pointer'
       chip.addEventListener('click', () => {
         const destino = document.getElementById(c.ancla)
         if (!destino) return
-        const dentroDelPanel = ['stockBajo', 'margenNegativoCard', 'stockMuertoCard'].includes(c.ancla)
-        if (dentroDelPanel) {
+        if (c.ancla === 'margenNegativoCard') {
           destino.scrollIntoView({ behavior: 'smooth', block: 'start' })
         } else {
           cerrarAlertasPanel()
@@ -950,6 +955,20 @@ function abrirAlertasPanel() {
 }
 function cerrarAlertasPanel() {
   document.getElementById('alertasPanelOverlay').style.display = 'none'
+}
+
+function abrirStockBajoOverlay() {
+  document.getElementById('stockBajoOverlay').style.display = 'flex'
+}
+function cerrarStockBajoOverlay() {
+  document.getElementById('stockBajoOverlay').style.display = 'none'
+}
+
+function abrirStockMuertoOverlay() {
+  document.getElementById('stockMuertoOverlay').style.display = 'flex'
+}
+function cerrarStockMuertoOverlay() {
+  document.getElementById('stockMuertoOverlay').style.display = 'none'
 }
 
 // ---------------------------------------------------------------------------
@@ -1555,6 +1574,14 @@ function initApp() {
   document.getElementById('btnCerrarAlertasPanel').addEventListener('click', cerrarAlertasPanel)
   document.getElementById('alertasPanelOverlay').addEventListener('click', (e) => {
     if (e.target.id === 'alertasPanelOverlay') cerrarAlertasPanel()
+  })
+  document.getElementById('btnCerrarStockBajo').addEventListener('click', cerrarStockBajoOverlay)
+  document.getElementById('stockBajoOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'stockBajoOverlay') cerrarStockBajoOverlay()
+  })
+  document.getElementById('btnCerrarStockMuerto').addEventListener('click', cerrarStockMuertoOverlay)
+  document.getElementById('stockMuertoOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'stockMuertoOverlay') cerrarStockMuertoOverlay()
   })
   document.getElementById('btnAuditoria').addEventListener('click', abrirAuditoria)
   document.getElementById('btnCerrarAuditoria').addEventListener('click', cerrarAuditoria)

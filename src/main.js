@@ -120,6 +120,15 @@ let rangoHasta = null
 let fechaMinimaHistorico = null // más vieja fecha real guardada en reportes_ventas_historico
 let rotacionData = []
 let sortState = { key: 'ingreso', dir: -1 }
+// Paginación de "Rotación de productos" (2026-08-09) -- antes se
+// renderizaban todas las filas al DOM de una. No era un problema real con
+// el catálogo actual (~2.900 productos como mucho), pero quedaba frágil
+// para cuando el catálogo creciera bastante más -- ver auditoría original.
+const FILAS_POR_PAGINA = 100
+let paginaRotacion = 1
+// Al imprimir hay que mostrar la tabla completa, no solo la página actual
+// en pantalla -- ver window.onbeforeprint/onafterprint en initApp().
+let imprimiendoRotacion = false
 
 function renderQuickRanges() {
   const box = document.getElementById('quickRanges')
@@ -345,12 +354,17 @@ function renderRotacion() {
   box.innerHTML = ''
   if (!filas.length) { box.appendChild(el('<div class="empty">Sin ventas en este periodo (con los filtros actuales).</div>')); return }
 
+  const totalPaginas = Math.max(1, Math.ceil(filas.length / FILAS_POR_PAGINA))
+  if (paginaRotacion > totalPaginas) paginaRotacion = totalPaginas
+  const inicio = (paginaRotacion - 1) * FILAS_POR_PAGINA
+  const filasPagina = imprimiendoRotacion ? filas : filas.slice(inicio, inicio + FILAS_POR_PAGINA)
+
   const thead = ROTACION_COLS.map((c) => {
     const arrow = sortState.key === c.key ? (sortState.dir === 1 ? '▲' : '▼') : ''
     return `<th class="sortable ${c.num ? 'num' : ''}" data-key="${c.key}">${c.label}<span class="arrow">${arrow}</span></th>`
   }).join('')
 
-  const rows = filas.map((p) => {
+  const rows = filasPagina.map((p) => {
     const cells = ROTACION_COLS.map((c) => {
       if (c.key === 'clasificacionABC') {
         return `<td><span class="abc-badge abc-${p.clasificacionABC.toLowerCase()}">${p.clasificacionABC}</span></td>`
@@ -369,10 +383,24 @@ function renderRotacion() {
       const key = th.dataset.key
       if (sortState.key === key) sortState.dir *= -1
       else sortState = { key, dir: -1 }
+      paginaRotacion = 1
       renderRotacion()
     })
   })
   box.appendChild(table)
+
+  if (totalPaginas > 1 && !imprimiendoRotacion) {
+    const paginador = el(`
+      <div class="paginador">
+        <button class="btn btn-outline btn-sm" data-accion="prev" ${paginaRotacion <= 1 ? 'disabled' : ''}>← Anterior</button>
+        <span class="hint-header" style="margin: 0 8px;">Página ${paginaRotacion} de ${totalPaginas} (${num(filas.length)} productos)</span>
+        <button class="btn btn-outline btn-sm" data-accion="next" ${paginaRotacion >= totalPaginas ? 'disabled' : ''}>Siguiente →</button>
+      </div>
+    `)
+    paginador.querySelector('[data-accion="prev"]').addEventListener('click', () => { paginaRotacion -= 1; renderRotacion() })
+    paginador.querySelector('[data-accion="next"]').addEventListener('click', () => { paginaRotacion += 1; renderRotacion() })
+    box.appendChild(paginador)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -763,6 +791,7 @@ function pintar(datos) {
   renderBarChart(document.getElementById('chartVentas'), datos.ventasDiarias, { money, num })
 
   rotacionData = datos.rotacionProductos
+  paginaRotacion = 1
   populateDeptoFilter(rotacionData)
   renderRotacion()
 
@@ -1282,8 +1311,8 @@ function initApp() {
     markActiveQuick()
     cargar()
   })
-  document.getElementById('filtroProducto').addEventListener('input', renderRotacion)
-  document.getElementById('filtroDepto').addEventListener('change', renderRotacion)
+  document.getElementById('filtroProducto').addEventListener('input', () => { paginaRotacion = 1; renderRotacion() })
+  document.getElementById('filtroDepto').addEventListener('change', () => { paginaRotacion = 1; renderRotacion() })
   document.getElementById('btnToggleInternas').addEventListener('click', () => {
     internasVisibles = !internasVisibles
     renderCuentasInternas(ultimoDatos && ultimoDatos.cuentasInternas)
@@ -1300,6 +1329,12 @@ function initApp() {
   })
   document.getElementById('btnCalcularAlertas').addEventListener('click', calcularAlertas)
   document.getElementById('filtroAlertas').addEventListener('input', renderAlertasTabla)
+
+  // Rotación de productos pagina en pantalla (ver FILAS_POR_PAGINA), pero al
+  // imprimir tiene que salir la tabla completa -- si no, solo se imprimiría
+  // la página que estaba visible en ese momento.
+  window.addEventListener('beforeprint', () => { imprimiendoRotacion = true; renderRotacion() })
+  window.addEventListener('afterprint', () => { imprimiendoRotacion = false; renderRotacion() })
 
   cargarFechaMinima()
   cargarTendencia()

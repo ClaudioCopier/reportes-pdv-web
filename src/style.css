@@ -222,6 +222,8 @@ body {
 .scroll-y { max-height: 400px; overflow-y: auto; }
 .scroll-y-big { max-height: 600px; overflow-y: auto; }
 
+.paginador { display: flex; align-items: center; justify-content: center; padding: 16px 0 4px; }
+
 table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
 thead th {
   padding: 16px 24px; background: var(--surface); color: var(--text-muted);

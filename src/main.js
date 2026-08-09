@@ -452,7 +452,16 @@ function renderComparativoInteranual(cmp) {
     return
   }
   if (cmp.sinDatosPrevios) {
-    box.appendChild(el(`<div class="empty">Sin ventas registradas del ${cmp.periodoAnteriorDesde} al ${cmp.periodoAnteriorHasta} -- todavía no hay con qué comparar ese periodo.</div>`))
+    // El POS solo tiene montos reales cargados desde marzo de 2026 -- antes
+    // de eso los tickets existen (se cuentan) pero total/subtotal quedaron
+    // en $0 en la base, no es que el negocio haya vendido cero. Mensaje
+    // distinto según la causa, para no dar a entender que la tienda no
+    // vendió nada esos días (confirmado real 2026-08-09).
+    const esHuecoDeDatosViejos = cmp.periodoAnteriorDesde < '2026-03-01'
+    const motivo = esHuecoDeDatosViejos
+      ? 'el POS no tiene montos cargados para fechas tan antiguas (recién a partir de marzo de 2026 el sistema empezó a registrar el total de cada venta) -- no significa que no se haya vendido nada esos días.'
+      : 'todavía no hay un cierre guardado para ese periodo.'
+    box.appendChild(el(`<div class="empty">Sin comparación confiable contra ${cmp.periodoAnteriorDesde} al ${cmp.periodoAnteriorHasta}: ${motivo}</div>`))
     return
   }
   const cards = [

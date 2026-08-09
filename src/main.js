@@ -296,12 +296,43 @@ function renderMetaVenta(datos) {
 // Tendencia histórica -- todo reportes_ventas_historico, independiente del
 // periodo seleccionado arriba.
 // ---------------------------------------------------------------------------
+// Días que se muestran en "Tendencia histórica"/"Margen bruto" (2026-08-09,
+// pedido explícito del usuario) -- antes traía TODO reportes_ventas_historico
+// sin límite, que funcionaba bien mientras esa tabla solo tenía unos meses de
+// datos. Tras el backfill de hoy (1.258 días reconstruidos desde 2022, ver
+// scripts/backfill-historico-lineas.js) el gráfico intentaba meter 1.288+
+// puntos en un ancho fijo -- cada fecha individual dejaba de poder
+// distinguirse. 90 días (3 meses) es suficiente para ver tendencia reciente
+// sin perder resolución; el histórico completo sigue disponible por rango
+// personalizado arriba (fechaMinimaHistorico ya llega hasta 2022-12-27).
+const DIAS_TENDENCIA = 90
+
+// Mismo problema que ya resolvió rellenarDiasFaltantes() para "Ventas por
+// día": reportes_ventas_historico solo tiene filas para los días que
+// realmente se cerraron -- un hueco real (tienda cerrada, día sin
+// procesar) haría que dos fechas no consecutivas queden pegadas una al
+// lado de la otra en el eje X, sin ningún aviso. Se completa cada día del
+// rango pedido con un resumen en cero donde no hay fila.
+function rellenarDiasFaltantesTendencia(filas, desde, hasta) {
+  const porFecha = new Map(filas.map((f) => [f.fecha, f]))
+  const vacio = { total: 0, costo: 0, gananciaBruta: 0, margenPct: 0, tickets: 0 }
+  const resultado = []
+  for (let d = startOfDay(desde); d <= hasta; d = addDays(d, 1)) {
+    const fecha = toISO(d)
+    resultado.push(porFecha.get(fecha) || { fecha, resumen: vacio })
+  }
+  return resultado
+}
+
 async function cargarTendencia() {
   const box = document.getElementById('chartTendencia')
   const boxMargen = document.getElementById('chartMargen')
+  const hoy = startOfDay(new Date())
+  const desde = addDays(hoy, -(DIAS_TENDENCIA - 1))
   const { data, error } = await supabase
     .from('reportes_ventas_historico')
     .select('fecha, resumen:datos->resumen')
+    .gte('fecha', toISO(desde))
     .order('fecha')
   if (error) {
     box.innerHTML = ''
@@ -311,8 +342,9 @@ async function cargarTendencia() {
     box.appendChild(d)
     return
   }
-  renderLineChart(box, data || [], { money, num })
-  renderMargenChart(boxMargen, data || [], { pct })
+  const completo = rellenarDiasFaltantesTendencia(data || [], desde, hoy)
+  renderLineChart(box, completo, { money, num })
+  renderMargenChart(boxMargen, completo, { pct })
 }
 
 // ---------------------------------------------------------------------------

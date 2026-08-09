@@ -183,6 +183,40 @@ function hojaDevoluciones(wb, devoluciones) {
   }
 }
 
+function hojaMargenNegativo(wb, productos) {
+  const hoja = wb.addWorksheet('Margen negativo')
+  hoja.columns = [
+    { header: 'Código', key: 'codigo', width: 16 },
+    { header: 'Producto', key: 'nombre', width: 40 },
+    { header: 'Cantidad', key: 'cantidad', width: 10 },
+    { header: 'Ingreso', key: 'ingreso', width: 14 },
+    { header: 'Costo', key: 'costo', width: 14 },
+    { header: 'Pérdida', key: 'perdida', width: 14 },
+    { header: 'Margen %', key: 'margenPct', width: 10 },
+  ]
+  estilarHeader(hoja)
+  for (const p of (productos || []).filter((p) => p.margenPct < 0)) {
+    hoja.addRow({ codigo: p.codigo, nombre: p.nombre, cantidad: p.cantidad, ingreso: p.ingreso, costo: p.costo, perdida: Math.abs(p.gananciaBruta), margenPct: p.margenPct })
+  }
+}
+
+function hojaStockMuerto(wb, stockMuerto, esRango) {
+  const hoja = wb.addWorksheet('Stock muerto (90d)')
+  hoja.columns = [
+    { header: 'Código', key: 'codigo', width: 16 },
+    { header: 'Producto', key: 'descripcion', width: 40 },
+    { header: 'Departamento', key: 'departamento', width: 20 },
+    { header: 'Existencia', key: 'existencia', width: 10 },
+    { header: 'Capital inmovilizado', key: 'capitalInmovilizado', width: 18 },
+  ]
+  estilarHeader(hoja)
+  if (esRango) {
+    hoja.addRow({ codigo: 'No disponible para rangos personalizados (es una foto del momento).' })
+    return
+  }
+  for (const p of stockMuerto || []) hoja.addRow(p)
+}
+
 function hojaInteranual(wb, cmp) {
   if (!cmp) return
   const hoja = wb.addWorksheet('Vs. año pasado')
@@ -212,6 +246,8 @@ export async function exportarDashboardExcel(datos, { modoRango = false } = {}) 
   hojaFormasPago(wb, datos.formasPago)
   hojaPorCajero(wb, datos.ventasPorCajero)
   hojaStockBajo(wb, datos.stockBajo, modoRango)
+  hojaMargenNegativo(wb, datos.rotacionProductos)
+  hojaStockMuerto(wb, datos.stockMuerto, modoRango)
   hojaFlujoCaja(wb, datos.flujoCaja)
   hojaCuentasInternas(wb, datos.cuentasInternas)
   hojaDevoluciones(wb, datos.devoluciones)

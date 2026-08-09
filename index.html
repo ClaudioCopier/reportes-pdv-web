@@ -89,6 +89,14 @@
       <!-- KPIs -->
       <section class="kpis" id="kpis"></section>
 
+      <!-- Panel de alertas consolidado -- pedido explícito del usuario
+           (2026-08-09): "todo tiene que estar a la mano" sin tener que
+           bajar por toda la página a revisar sección por sección. -->
+      <section class="card alertas-panel" id="alertasPanel" style="display:none">
+        <div class="card-header"><h2>🔔 Necesita tu atención</h2></div>
+        <div id="alertasPanelBody" class="alertas-panel-body"></div>
+      </section>
+
       <!-- Meta de venta del mes -- solo visible viendo "Este mes" -->
       <section class="card" id="metaVentaCard" style="display:none">
         <div class="card-header">
@@ -179,6 +187,26 @@
             <span id="stockCount" class="badge"></span>
           </div>
           <div id="stockBajo" class="table-wrap scroll-y"></div>
+        </section>
+      </div>
+
+      <div class="grid-2">
+        <section class="card" id="margenNegativoCard">
+          <div class="card-header alert-header">
+            <h2>📉 Productos con margen negativo</h2>
+            <span id="margenNegativoCount" class="badge"></span>
+          </div>
+          <p class="hint-header">Productos que se vendieron perdiendo plata en el periodo seleccionado (costo mayor al ingreso) -- candidatos a revisar el precio.</p>
+          <div id="margenNegativo" class="table-wrap scroll-y"></div>
+        </section>
+
+        <section class="card" id="stockMuertoCard">
+          <div class="card-header alert-header">
+            <h2>💤 Stock sin vender hace 90+ días</h2>
+            <span id="stockMuertoCount" class="badge"></span>
+          </div>
+          <p class="hint-header">Productos con stock cargado que no tuvieron ninguna venta en los últimos 90 días -- candidatos a liquidar, promocionar o descontinuar. Ordenado por capital inmovilizado (existencia × costo).</p>
+          <div id="stockMuerto" class="table-wrap scroll-y"></div>
         </section>
       </div>
 
@@ -303,6 +331,37 @@
         </div>
         <div id="alertasTabla" class="table-wrap scroll-y-big"></div>
       </section>
+    </div>
+  </div>
+</div>
+
+<!-- HISTORIAL COMPLETO DE UN PRODUCTO -->
+<div id="historialOverlay" class="auditoria-overlay" style="display:none">
+  <div class="auditoria-panel">
+    <div class="auditoria-panel-header">
+      <div>
+        <h2 id="historialTitulo">Historial del producto</h2>
+        <p class="subtitle">Ventas mes a mes desde que hay datos (2022 en adelante) -- independiente del periodo seleccionado en el resto del sitio.</p>
+      </div>
+      <button id="btnCerrarHistorial" class="btn-close" aria-label="Cerrar" type="button">✕</button>
+    </div>
+
+    <div class="auditoria-body">
+      <p id="historialStatus" class="status-msg"></p>
+
+      <div id="historialResultado" style="display:none">
+        <div class="kpis auditoria-kpis-grid" id="historialKpis"></div>
+
+        <section class="card-inner">
+          <div class="card-header-inner"><h3>Unidades vendidas por mes</h3></div>
+          <div id="historialChart" class="chart"></div>
+        </section>
+
+        <section class="card-inner">
+          <div class="card-header-inner"><h3>Detalle mes a mes</h3></div>
+          <div id="historialTabla" class="table-wrap scroll-y-big"></div>
+        </section>
+      </div>
     </div>
   </div>
 </div>

@@ -224,6 +224,20 @@ async function guardarMetaVenta(monto) {
   if (ultimoDatos) renderMetaVenta(ultimoDatos)
 }
 
+// Proyección de fin de mes (2026-08-09, pedido explícito del usuario) --
+// "a este ritmo, ¿cuánto voy a vender este mes?", independiente de si hay
+// una meta cargada o no. Simple: total de lo que va del mes, dividido por
+// los días ya transcurridos (hoy cuenta entero, aunque el día no haya
+// terminado -- mismo criterio que usa el resto del sitio para "hoy"),
+// multiplicado por los días totales del mes.
+function proyeccionFinDeMes(totalActual) {
+  const hoy = new Date()
+  const diasTranscurridos = hoy.getDate()
+  const diasDelMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate()
+  if (diasTranscurridos <= 0) return null
+  return { proyeccion: (totalActual / diasTranscurridos) * diasDelMes, diasTranscurridos, diasDelMes }
+}
+
 function renderMetaVenta(datos) {
   const card = document.getElementById('metaVentaCard')
   const body = document.getElementById('metaVentaBody')
@@ -232,11 +246,25 @@ function renderMetaVenta(datos) {
   card.style.display = ''
   body.innerHTML = ''
 
+  const actual = datos.resumen.total
+  const proy = proyeccionFinDeMes(actual)
+  const proyeccionHtml = proy ? `
+    <div class="meta-venta-proyeccion">
+      Al ritmo de estos ${proy.diasTranscurridos} días, vas a terminar el mes en aprox. <b>${money(proy.proyeccion)}</b>
+      ${metaVentaMonto !== null ? (proy.proyeccion >= metaVentaMonto
+        ? ' — <span class="kpi-up">alcanzarías la meta ✓</span>'
+        : ` — <span class="kpi-down">quedarías ${money(metaVentaMonto - proy.proyeccion)} corto de la meta</span>`) : ''}
+    </div>
+  ` : ''
+
   if (metaVentaMonto === null) {
     body.appendChild(el(`
-      <div class="meta-venta-form">
-        <input type="number" id="metaVentaInput" placeholder="Ej: 8000000" min="0" step="1">
-        <button id="btnGuardarMeta" class="btn btn-primary btn-sm">Guardar meta de ${new Date().toLocaleDateString('es-CL', { month: 'long' })}</button>
+      <div>
+        ${proyeccionHtml}
+        <div class="meta-venta-form">
+          <input type="number" id="metaVentaInput" placeholder="Ej: 8000000" min="0" step="1">
+          <button id="btnGuardarMeta" class="btn btn-primary btn-sm">Guardar meta de ${new Date().toLocaleDateString('es-CL', { month: 'long' })}</button>
+        </div>
       </div>
     `))
     document.getElementById('btnGuardarMeta').addEventListener('click', () => {
@@ -247,7 +275,6 @@ function renderMetaVenta(datos) {
     return
   }
 
-  const actual = datos.resumen.total
   const pctAvance = metaVentaMonto > 0 ? Math.min(100, (actual / metaVentaMonto) * 100) : 0
   const falta = Math.max(0, metaVentaMonto - actual)
   body.appendChild(el(`
@@ -258,6 +285,7 @@ function renderMetaVenta(datos) {
       </div>
       <div class="meta-venta-barra"><div class="meta-venta-barra-fill" style="width:${pctAvance}%"></div></div>
       <div class="meta-venta-falta">${falta > 0 ? `Faltan ${money(falta)} para llegar a la meta.` : '¡Meta alcanzada! 🎉'}</div>
+      ${proyeccionHtml}
       <button id="btnEditarMeta" class="btn btn-outline btn-sm" style="margin-top:8px;">Editar meta</button>
     </div>
   `))
@@ -294,15 +322,21 @@ async function cargarTendencia() {
 async function cargarSalud() {
   const box = document.getElementById('agenteBanner')
   const { data, error } = await supabase.from('agente_estado').select('ultimo_latido').eq('id', 1).maybeSingle()
-  if (error || !data) { box.style.display = 'none'; return }
+  if (error || !data) { box.style.display = 'none'; agenteCaidoInfo = null; return }
   const ultimo = new Date(data.ultimo_latido)
   const minutos = Math.round((Date.now() - ultimo.getTime()) / 60000)
   if (minutos > 45) {
     box.style.display = 'flex'
     box.innerHTML = `⚠ El agente de la tienda no responde hace ${minutos} min (último aviso: ${ultimo.toLocaleString('es-CL')}). Revisar que la PC de la tienda y el agente sigan encendidos.`
+    agenteCaidoInfo = { minutos }
   } else {
     box.style.display = 'none'
+    agenteCaidoInfo = null
   }
+  // cargarSalud() corre aparte de cargar() (no espera a que termine) -- si
+  // los datos principales ya se habían pintado antes de que esto resolviera,
+  // hay que volver a armar el panel de alertas para que lo incluya.
+  if (ultimoDatos) renderAlertasPanel(ultimoDatos, (ultimoDatos.rotacionProductos || []).filter((p) => p.margenPct < 0), modo === 'rango')
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +396,7 @@ function renderRotacion() {
   const thead = ROTACION_COLS.map((c) => {
     const arrow = sortState.key === c.key ? (sortState.dir === 1 ? '▲' : '▼') : ''
     return `<th class="sortable ${c.num ? 'num' : ''}" data-key="${c.key}">${c.label}<span class="arrow">${arrow}</span></th>`
-  }).join('')
+  }).join('') + '<th></th>'
 
   const rows = filasPagina.map((p) => {
     const cells = ROTACION_COLS.map((c) => {
@@ -374,7 +408,8 @@ function renderRotacion() {
       const tag = c.key === 'nombre' && p.estimado ? '<span class="badge-soft" title="Incluye ventas de hoy estimadas del log, todavía no confirmadas por un respaldo">HOY: EST.</span>' : ''
       return `<td class="${c.num ? 'num' : ''}">${display}${tag}</td>`
     }).join('')
-    return `<tr>${cells}</tr>`
+    const btnHistorial = imprimiendoRotacion ? '' : `<td><button class="btn btn-ghost btn-sm" data-historial-codigo="${p.codigo}" data-historial-nombre="${p.nombre.replace(/"/g, '&quot;')}">📈 Histórico</button></td>`
+    return `<tr>${cells}${btnHistorial}</tr>`
   }).join('')
 
   const table = el(`<table><thead><tr>${thead}</tr></thead><tbody>${rows}</tbody></table>`)
@@ -386,6 +421,10 @@ function renderRotacion() {
       paginaRotacion = 1
       renderRotacion()
     })
+  })
+  table.querySelector('tbody').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-historial-codigo]')
+    if (btn) abrirHistorial(btn.dataset.historialCodigo, btn.dataset.historialNombre)
   })
   box.appendChild(table)
 
@@ -656,7 +695,9 @@ function combinarDias(dias) {
       porCajero.set(c.cajero, cur)
     }
   }
-  const ventasPorCajero = [...porCajero.values()].sort((a, b) => b.total - a.total)
+  const ventasPorCajero = [...porCajero.values()]
+    .map((c) => ({ ...c, ticketPromedio: c.tickets > 0 ? c.total / c.tickets : 0 }))
+    .sort((a, b) => b.total - a.total)
 
   const entradasCaja = { total: 0, veces: 0 }, salidasCaja = { total: 0, veces: 0 }, pagosAbonos = { total: 0, veces: 0 }
   const porCategoria = new Map()
@@ -707,6 +748,7 @@ function combinarDias(dias) {
     formasPago,
     ventasPorCajero,
     stockBajo: [],
+    stockMuerto: [],
     flujoCaja,
     cuentasInternas,
     devoluciones,
@@ -777,6 +819,85 @@ async function cargarRango(desdeStr, hastaStr) {
 }
 
 // ---------------------------------------------------------------------------
+// Productos con margen negativo (2026-08-09) -- calculado client-side de lo
+// que ya viene en rotacionProductos, no pide nada aparte.
+// ---------------------------------------------------------------------------
+function renderMargenNegativo(productos) {
+  const perdiendo = (productos || []).filter((p) => p.margenPct < 0).sort((a, b) => a.margenPct - b.margenPct)
+  document.getElementById('margenNegativoCount').textContent = perdiendo.length
+  renderTable('margenNegativo',
+    [{ label: 'Producto' }, { label: 'Cant.', num: true }, { label: 'Ingreso', num: true }, { label: 'Costo', num: true }, { label: 'Pérdida', num: true }, { label: 'Margen %', num: true }],
+    perdiendo,
+    (p) => `<tr class="low-stock-row"><td>${p.nombre}</td><td class="num">${num(p.cantidad)}</td><td class="num">${money(p.ingreso)}</td><td class="num">${money(p.costo)}</td><td class="num">${money(Math.abs(p.gananciaBruta))}</td><td class="num">${pct(p.margenPct)}</td></tr>`,
+    'Ningún producto con margen negativo en este periodo. 🎉'
+  )
+  return perdiendo
+}
+
+// ---------------------------------------------------------------------------
+// Stock muerto -- viene calculado del backend (stats.js::stockMuerto()),
+// como stockBajo: una foto del momento, no aplica a rangos personalizados.
+// ---------------------------------------------------------------------------
+function renderStockMuerto(stockMuerto, esRango) {
+  const lista = stockMuerto || []
+  document.getElementById('stockMuertoCount').textContent = esRango ? '—' : lista.length
+  const emptyMsg = esRango
+    ? 'No disponible para rangos personalizados (es una foto del momento).'
+    : 'Ningún producto con stock parado hace 90+ días. 🎉'
+  renderTable('stockMuerto',
+    [{ label: 'Producto' }, { label: 'Departamento' }, { label: 'Existencia', num: true }, { label: 'Capital inmovilizado', num: true }],
+    lista,
+    (p) => `<tr><td>${p.descripcion}</td><td>${p.departamento || '—'}</td><td class="num">${num(p.existencia)}</td><td class="num">${money(p.capitalInmovilizado)}</td></tr>`,
+    emptyMsg
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Panel de alertas consolidado -- "qué necesita mi atención", sin tener que
+// bajar por toda la página. Se arma DESPUÉS de pintar el resto (reusa lo ya
+// calculado: margen negativo, stock bajo/muerto, meta, salud del agente).
+// ---------------------------------------------------------------------------
+let agenteCaidoInfo = null // lo llena cargarSalud()
+
+function renderAlertasPanel(datos, margenNegativoLista, esRango) {
+  const panel = document.getElementById('alertasPanel')
+  const body = document.getElementById('alertasPanelBody')
+  const chips = []
+
+  if (agenteCaidoInfo) {
+    chips.push({ tipo: 'error', texto: `⚠ El agente de la tienda no responde hace ${agenteCaidoInfo.minutos} min`, ancla: null })
+  }
+  if (!esRango && (datos.stockBajo || []).length > 0) {
+    chips.push({ tipo: 'alerta', texto: `${datos.stockBajo.length} producto(s) con stock bajo`, ancla: 'stockBajo' })
+  }
+  if ((margenNegativoLista || []).length > 0) {
+    chips.push({ tipo: 'alerta', texto: `${margenNegativoLista.length} producto(s) con margen negativo`, ancla: 'margenNegativoCard' })
+  }
+  if (!esRango && (datos.stockMuerto || []).length > 0) {
+    const capital = datos.stockMuerto.reduce((s, p) => s + p.capitalInmovilizado, 0)
+    chips.push({ tipo: 'info', texto: `${datos.stockMuerto.length} producto(s) sin vender hace 90+ días (${money(capital)} inmovilizados)`, ancla: 'stockMuertoCard' })
+  }
+  if (modo === 'rapido' && claveActual === 'mes' && metaVentaMonto !== null) {
+    const proy = proyeccionFinDeMes(datos.resumen.total)
+    if (proy && proy.proyeccion < metaVentaMonto) {
+      chips.push({ tipo: 'alerta', texto: `Al ritmo actual, quedarías ${money(metaVentaMonto - proy.proyeccion)} corto de la meta del mes`, ancla: 'metaVentaCard' })
+    }
+  }
+
+  if (!chips.length) { panel.style.display = 'none'; return }
+  panel.style.display = ''
+  body.innerHTML = ''
+  chips.forEach((c) => {
+    const chip = el(`<div class="alerta-chip alerta-chip-${c.tipo}">${c.texto}</div>`)
+    if (c.ancla) {
+      chip.style.cursor = 'pointer'
+      chip.addEventListener('click', () => document.getElementById(c.ancla)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+    }
+    body.appendChild(chip)
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Carga principal -- lee directo de Supabase, nunca calcula nada acá.
 // ---------------------------------------------------------------------------
 let ultimoDatos = null
@@ -810,9 +931,9 @@ function pintar(datos) {
   )
 
   renderTable('ventasPorCajero',
-    [{ label: 'Cajero' }, { label: 'Tickets', num: true }, { label: 'Total', num: true }, { label: 'Ganancia', num: true }],
+    [{ label: 'Cajero' }, { label: 'Tickets', num: true }, { label: 'Total', num: true }, { label: 'Ticket prom.', num: true }, { label: 'Ganancia', num: true }],
     datos.ventasPorCajero || [],
-    (r) => `<tr><td>${r.cajero}</td><td class="num">${num(r.tickets)}</td><td class="num">${money(r.total)}</td><td class="num">${money(r.gananciaBruta)}</td></tr>`,
+    (r) => `<tr><td>${r.cajero}</td><td class="num">${num(r.tickets)}</td><td class="num">${money(r.total)}</td><td class="num">${money(r.ticketPromedio || 0)}</td><td class="num">${money(r.gananciaBruta)}</td></tr>`,
     'Sin ventas en este periodo.'
   )
 
@@ -829,6 +950,10 @@ function pintar(datos) {
     (r) => `<tr class="low-stock-row"><td>${r.descripcion}</td><td class="num">${num(r.existencia)}</td><td class="num">${num(r.minimo)}</td></tr>`,
     stockEmptyMsg
   )
+
+  const margenNegativoLista = renderMargenNegativo(datos.rotacionProductos)
+  renderStockMuerto(datos.stockMuerto, modo === 'rango')
+  renderAlertasPanel(datos, margenNegativoLista, modo === 'rango')
 }
 
 async function cargar() {
@@ -1280,6 +1405,88 @@ async function exportarAuditoria() {
 }
 
 // ---------------------------------------------------------------------------
+// Historial completo de un producto -- botón "📈 Histórico" en cada fila de
+// Rotación de productos. Mismo patrón de solicitud+polling que Auditoría de
+// compra, pero mucho más liviano (una sola consulta, no recorre el
+// catálogo) -- pedido explícito del usuario (2026-08-09): "¿cuánto vendí
+// históricamente de este producto?", sin tener que ir cambiando el rango de
+// fechas a mano.
+// ---------------------------------------------------------------------------
+function abrirHistorial(codigo, nombre) {
+  document.getElementById('historialOverlay').style.display = 'flex'
+  document.getElementById('historialTitulo').textContent = 'Historial de "' + nombre + '"'
+  document.getElementById('historialResultado').style.display = 'none'
+  generarHistorial(codigo)
+}
+function cerrarHistorial() {
+  document.getElementById('historialOverlay').style.display = 'none'
+}
+
+const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+function pintarHistorial(datos) {
+  document.getElementById('historialResultado').style.display = ''
+
+  const box = document.getElementById('historialKpis')
+  box.innerHTML = ''
+  const cards = [
+    { label: 'Unidades vendidas (histórico)', value: num(datos.cantidadTotal) },
+    { label: 'Ingreso total (histórico)', value: money(datos.ingresoTotal) },
+    { label: 'Primer registro', value: datos.primerMes ? `${MESES_LABEL[datos.primerMes.mes - 1]} ${datos.primerMes.anio}` : '—' },
+    { label: 'Existencia actual', value: datos.existencia === null ? '—' : num(datos.existencia) },
+  ]
+  cards.forEach((c) => box.appendChild(el(`<div class="kpi-card"><div class="kpi-label">${c.label}</div><div class="kpi-value">${c.value}</div></div>`)))
+
+  const buckets = datos.meses.map((m) => ({ label: `${MESES_LABEL[m.mes - 1]} ${String(m.anio).slice(2)}`, cantidad: m.cantidad, ingreso: m.ingreso }))
+  renderAuditoriaTendenciaChart(document.getElementById('historialChart'), buckets, { num })
+
+  renderTable('historialTabla',
+    [{ label: 'Mes' }, { label: 'Unidades', num: true }, { label: 'Ingreso', num: true }],
+    [...datos.meses].reverse(),
+    (m) => `<tr><td>${MESES_LABEL[m.mes - 1]} ${m.anio}</td><td class="num">${num(m.cantidad)}</td><td class="num">${money(m.ingreso)}</td></tr>`,
+    'Sin ventas registradas.'
+  )
+}
+
+async function generarHistorial(codigo) {
+  const statusEl = document.getElementById('historialStatus')
+  statusEl.textContent = 'Solicitando a la tienda...'
+  try {
+    const { data, error } = await supabase
+      .from('historial_producto_solicitudes')
+      .insert({ codigo })
+      .select('id')
+      .single()
+    if (error) { statusEl.textContent = 'Error: ' + error.message; return }
+
+    const inicio = Date.now()
+    const TIMEOUT_MS = 100000
+    while (true) {
+      await new Promise((r) => setTimeout(r, 1500))
+      const { data: row, error: errRow } = await supabase
+        .from('historial_producto_solicitudes')
+        .select('status, mensaje, datos')
+        .eq('id', data.id)
+        .maybeSingle()
+      if (errRow) { statusEl.textContent = 'Error: ' + errRow.message; return }
+      if (row?.status === 'done') {
+        statusEl.textContent = row.mensaje || 'Listo.'
+        pintarHistorial(row.datos)
+        return
+      }
+      if (row?.status === 'error') { statusEl.textContent = 'Error del agente: ' + (row.mensaje || 'sin detalle'); return }
+      if (Date.now() - inicio > TIMEOUT_MS) {
+        statusEl.textContent = 'La tienda no respondió a tiempo (¿está abierto el agente en la PC?).'
+        return
+      }
+      statusEl.textContent = row?.status === 'running' ? 'Calculando en la tienda...' : 'Esperando que el agente tome la solicitud...'
+    }
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + err.message
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 function initApp() {
@@ -1297,6 +1504,10 @@ function initApp() {
   document.getElementById('auditoriaForm').addEventListener('submit', generarAuditoria)
   document.getElementById('btnExportarAuditoria').addEventListener('click', exportarAuditoria)
   document.getElementById('btnToggleAuditoriaDetalle').addEventListener('click', toggleAuditoriaDetalle)
+  document.getElementById('btnCerrarHistorial').addEventListener('click', cerrarHistorial)
+  document.getElementById('historialOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'historialOverlay') cerrarHistorial()
+  })
   document.getElementById('rangoForm').addEventListener('submit', (e) => {
     e.preventDefault()
     const statusEl = document.getElementById('status')

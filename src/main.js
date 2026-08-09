@@ -892,7 +892,7 @@ function renderStockMuerto(stockMuerto, esRango) {
 let agenteCaidoInfo = null // lo llena cargarSalud()
 
 function renderAlertasPanel(datos, margenNegativoLista, esRango) {
-  const panel = document.getElementById('alertasPanel')
+  const badge = document.getElementById('alertasPanelBadge')
   const body = document.getElementById('alertasPanelBody')
   const chips = []
 
@@ -916,17 +916,33 @@ function renderAlertasPanel(datos, margenNegativoLista, esRango) {
     }
   }
 
-  if (!chips.length) { panel.style.display = 'none'; return }
-  panel.style.display = ''
+  if (!chips.length) {
+    badge.style.display = 'none'
+    body.innerHTML = ''
+    body.appendChild(el('<div class="empty">Nada que necesite tu atención en este periodo. 🎉</div>'))
+    return
+  }
+  badge.style.display = ''
+  badge.textContent = chips.length
   body.innerHTML = ''
   chips.forEach((c) => {
     const chip = el(`<div class="alerta-chip alerta-chip-${c.tipo}">${c.texto}</div>`)
     if (c.ancla) {
       chip.style.cursor = 'pointer'
-      chip.addEventListener('click', () => document.getElementById(c.ancla)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+      chip.addEventListener('click', () => {
+        cerrarAlertasPanel()
+        document.getElementById(c.ancla)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
     }
     body.appendChild(chip)
   })
+}
+
+function abrirAlertasPanel() {
+  document.getElementById('alertasPanelOverlay').style.display = 'flex'
+}
+function cerrarAlertasPanel() {
+  document.getElementById('alertasPanelOverlay').style.display = 'none'
 }
 
 // ---------------------------------------------------------------------------
@@ -1528,6 +1544,11 @@ function initApp() {
   document.getElementById('btnRefresh').addEventListener('click', solicitarActualizacion)
   document.getElementById('btnExportarDashboard').addEventListener('click', exportarDashboard)
   document.getElementById('btnCerrarSesion').addEventListener('click', cerrarSesion)
+  document.getElementById('btnAlertasPanel').addEventListener('click', abrirAlertasPanel)
+  document.getElementById('btnCerrarAlertasPanel').addEventListener('click', cerrarAlertasPanel)
+  document.getElementById('alertasPanelOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'alertasPanelOverlay') cerrarAlertasPanel()
+  })
   document.getElementById('btnAuditoria').addEventListener('click', abrirAuditoria)
   document.getElementById('btnCerrarAuditoria').addEventListener('click', cerrarAuditoria)
   document.getElementById('auditoriaOverlay').addEventListener('click', (e) => {

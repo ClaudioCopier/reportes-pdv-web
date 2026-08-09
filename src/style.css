@@ -291,11 +291,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .meta-venta-falta { margin-top: 8px; font-size: 13px; color: var(--text-muted); }
 .meta-venta-proyeccion { margin-top: 12px; padding: 12px; background: var(--brand-light); border-radius: var(--radius-sm); font-size: 13px; color: var(--text-main); }
 
-.alertas-panel-body { display: flex; flex-wrap: wrap; gap: 10px; padding: 4px 24px 20px; }
-.alerta-chip { padding: 10px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; }
+.alertas-panel-body { display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; }
+.alerta-chip { padding: 12px 18px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; }
 .alerta-chip-error { background: var(--alert-error-bg); color: var(--alert-error); }
 .alerta-chip-alerta { background: var(--alert-warn-bg); color: var(--alert-warn); }
 .alerta-chip-info { background: var(--brand-light); color: var(--brand-card); }
+
+.nav-badge { margin-left: auto; }
 
 /* ---------------- Overlay Auditoría Premium ---------------- */
 .auditoria-overlay {

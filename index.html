@@ -40,6 +40,10 @@
       </div>
 
       <div class="nav-section" style="margin-top: 24px;">Herramientas</div>
+      <button id="btnAlertasPanel" class="nav-item">
+        <span class="icon">🔔</span> Necesita tu atención
+        <span id="alertasPanelBadge" class="badge nav-badge" style="display:none;"></span>
+      </button>
       <button id="btnAuditoria" class="nav-item">
         <span class="icon">🛒</span> Auditoría de compra
       </button>
@@ -88,14 +92,6 @@
 
       <!-- KPIs -->
       <section class="kpis" id="kpis"></section>
-
-      <!-- Panel de alertas consolidado -- pedido explícito del usuario
-           (2026-08-09): "todo tiene que estar a la mano" sin tener que
-           bajar por toda la página a revisar sección por sección. -->
-      <section class="card alertas-panel" id="alertasPanel" style="display:none">
-        <div class="card-header"><h2>🔔 Necesita tu atención</h2></div>
-        <div id="alertasPanelBody" class="alertas-panel-body"></div>
-      </section>
 
       <!-- Meta de venta del mes -- solo visible viendo "Este mes" -->
       <section class="card" id="metaVentaCard" style="display:none">
@@ -230,6 +226,22 @@
         <div id="cuentasInternasDetalle" class="table-wrap scroll-y-big" style="display:none"></div>
       </section>
     </main>
+  </div>
+</div>
+
+<!-- NECESITA TU ATENCIÓN (panel de alertas consolidado) -->
+<div id="alertasPanelOverlay" class="auditoria-overlay" style="display:none">
+  <div class="auditoria-panel">
+    <div class="auditoria-panel-header">
+      <div>
+        <h2>🔔 Necesita tu atención</h2>
+        <p class="subtitle">Stock bajo, margen negativo, stock parado y meta del mes -- todo junto, del periodo seleccionado en el resto del sitio.</p>
+      </div>
+      <button id="btnCerrarAlertasPanel" class="btn-close" aria-label="Cerrar" type="button">✕</button>
+    </div>
+    <div class="auditoria-body">
+      <div id="alertasPanelBody" class="alertas-panel-body"></div>
+    </div>
   </div>
 </div>
 

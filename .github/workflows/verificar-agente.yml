@@ -1,13 +1,17 @@
 name: Verificar agente de la tienda
 
-# Dispara api/verificar-agente.js cada 15 min -- el cron nativo de Vercel en
-# el plan gratuito solo permite una corrida por día, no alcanza. La lógica
-# de horario (10:30 a 21:00, hora de Santiago) y de no repetir el mismo
-# aviso vive en la propia función, no acá -- este workflow solo toca timbre
-# seguido, la función decide si hace algo.
+# Dispara api/verificar-agente.js -- la lógica de horario (10:30 a 21:00,
+# hora de Santiago) y de no repetir el mismo aviso vive en la propia
+# función, no acá.
+#
+# El cron automático (*/15 * * * *) se DESACTIVÓ el 2026-08-09: confirmado
+# en producción que GitHub Actions retrasa/saltea los schedules de alta
+# frecuencia (cada 15 min) -- corridas reales cada 2-3 horas en vez de cada
+# 15 min, documentado así por GitHub para repos gratuitos con mucha carga
+# en su infraestructura. El disparo real ahora lo hace cron-job.org
+# (jobId 8239955, cuenta del usuario) pegándole al mismo endpoint. Este
+# workflow queda solo para poder probarlo a mano (workflow_dispatch).
 on:
-  schedule:
-    - cron: '*/15 * * * *'
   workflow_dispatch: {}
 
 jobs:

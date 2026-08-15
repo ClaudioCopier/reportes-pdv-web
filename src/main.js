@@ -1486,14 +1486,34 @@ async function exportarAuditoria() {
 // históricamente de este producto?", sin tener que ir cambiando el rango de
 // fechas a mano.
 // ---------------------------------------------------------------------------
+// Caché en memoria (dura mientras la pestaña siga abierta, se pierde al
+// recargar la página) -- pedido explícito del usuario (2026-08-09): volver
+// a abrir el historial del mismo producto en la misma sesión no debería
+// tener que esperar de nuevo a que el agente de la tienda responda. El botón
+// "Actualizar" fuerza un pedido nuevo cuando hace falta un dato más fresco.
+const historialCache = new Map()
+let historialCodigoActual = null
+let historialCargando = false
+
 function abrirHistorial(codigo, nombre) {
   document.getElementById('historialOverlay').style.display = 'flex'
   document.getElementById('historialTitulo').textContent = 'Historial de "' + nombre + '"'
+  historialCodigoActual = codigo
+
+  if (historialCache.has(codigo)) {
+    document.getElementById('historialStatus').textContent = 'Mostrando lo ya cargado en esta sesión -- tocá "Actualizar" para pedir el dato más reciente.'
+    pintarHistorial(historialCache.get(codigo))
+    return
+  }
+
   document.getElementById('historialResultado').style.display = 'none'
   generarHistorial(codigo)
 }
 function cerrarHistorial() {
   document.getElementById('historialOverlay').style.display = 'none'
+}
+function actualizarHistorial() {
+  if (historialCodigoActual) generarHistorial(historialCodigoActual)
 }
 
 const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
@@ -1523,6 +1543,8 @@ function pintarHistorial(datos) {
 }
 
 async function generarHistorial(codigo) {
+  if (historialCargando) return
+  historialCargando = true
   const statusEl = document.getElementById('historialStatus')
   statusEl.textContent = 'Solicitando a la tienda...'
   try {
@@ -1545,6 +1567,7 @@ async function generarHistorial(codigo) {
       if (errRow) { statusEl.textContent = 'Error: ' + errRow.message; return }
       if (row?.status === 'done') {
         statusEl.textContent = row.mensaje || 'Listo.'
+        historialCache.set(codigo, row.datos)
         pintarHistorial(row.datos)
         return
       }
@@ -1557,6 +1580,8 @@ async function generarHistorial(codigo) {
     }
   } catch (err) {
     statusEl.textContent = 'Error: ' + err.message
+  } finally {
+    historialCargando = false
   }
 }
 
@@ -1592,6 +1617,7 @@ function initApp() {
   document.getElementById('btnExportarAuditoria').addEventListener('click', exportarAuditoria)
   document.getElementById('btnToggleAuditoriaDetalle').addEventListener('click', toggleAuditoriaDetalle)
   document.getElementById('btnCerrarHistorial').addEventListener('click', cerrarHistorial)
+  document.getElementById('btnActualizarHistorial').addEventListener('click', actualizarHistorial)
   document.getElementById('historialOverlay').addEventListener('click', (e) => {
     if (e.target.id === 'historialOverlay') cerrarHistorial()
   })

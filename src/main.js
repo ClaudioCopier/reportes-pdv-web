@@ -348,6 +348,34 @@ async function cargarTendencia() {
 }
 
 // ---------------------------------------------------------------------------
+// Vencimientos (2026-08-16) -- lee el resumen público que agente-servidor
+// publica en cada reconciliación (vencimientos_resumen_publico), nunca la
+// tabla real (lotes_vencimiento, protegida para logueados de inventario-app
+// -- este sitio nunca pasa por Supabase Auth, así que no podría leerla).
+// Solo lectura acá: cargar fechas u omitir se hace desde la app de
+// Vencimientos, no desde este panel.
+// ---------------------------------------------------------------------------
+let vencimientosInfo = []
+async function cargarVencimientos() {
+  const { data, error } = await supabase
+    .from('vencimientos_resumen_publico')
+    .select('*')
+    .order('dias_restantes', { ascending: true })
+  vencimientosInfo = error ? [] : (data || [])
+  renderTable('vencimientos',
+    [{ label: 'Producto' }, { label: 'Vence', num: false }, { label: 'Días restantes', num: true }, { label: 'Cantidad', num: true }],
+    vencimientosInfo,
+    (r) => `<tr class="${r.dias_restantes < 0 ? 'low-stock-row' : ''}"><td>${r.descripcion}</td><td>${r.fecha_vencimiento || '—'}</td><td class="num">${r.dias_restantes}</td><td class="num">${num(r.cantidad)}</td></tr>`,
+    'Nada por vencer pronto.'
+  )
+  document.getElementById('vencimientosCount').textContent = vencimientosInfo.length
+  // Re-pinta el panel de alertas con el chip nuevo si ya se habían cargado
+  // los datos principales (cargarVencimientos() corre en paralelo, no
+  // espera a cargar()).
+  if (ultimoDatos) renderAlertasPanel(ultimoDatos, (ultimoDatos.rotacionProductos || []).filter((p) => p.margenPct < 0), modo === 'rango')
+}
+
+// ---------------------------------------------------------------------------
 // Salud del agente -- heartbeat independiente de si alguien pidió un
 // reporte. Se revisa una vez al abrir el sitio.
 // ---------------------------------------------------------------------------
@@ -909,6 +937,13 @@ function renderAlertasPanel(datos, margenNegativoLista, esRango) {
     const capital = datos.stockMuerto.reduce((s, p) => s + p.capitalInmovilizado, 0)
     chips.push({ tipo: 'info', texto: `${datos.stockMuerto.length} producto(s) sin vender hace 90+ días (${money(capital)} inmovilizados)`, ancla: 'stockMuertoCard' })
   }
+  if (vencimientosInfo.length > 0) {
+    const vencidos = vencimientosInfo.filter((v) => v.dias_restantes < 0).length
+    const texto = vencidos > 0
+      ? `${vencimientosInfo.length} producto(s) por vencer (${vencidos} ya vencido(s))`
+      : `${vencimientosInfo.length} producto(s) próximos a vencer`
+    chips.push({ tipo: vencidos > 0 ? 'error' : 'alerta', texto, ancla: 'vencimientosOverlay' })
+  }
   if (modo === 'rapido' && claveActual === 'mes' && metaVentaMonto !== null) {
     const proy = proyeccionFinDeMes(datos.resumen.total)
     if (proy && proy.proyeccion < metaVentaMonto) {
@@ -933,6 +968,9 @@ function renderAlertasPanel(datos, margenNegativoLista, esRango) {
     } else if (c.ancla === 'stockMuertoCard') {
       chip.style.cursor = 'pointer'
       chip.addEventListener('click', () => abrirStockMuertoOverlay())
+    } else if (c.ancla === 'vencimientosOverlay') {
+      chip.style.cursor = 'pointer'
+      chip.addEventListener('click', () => abrirVencimientosOverlay())
     } else if (c.ancla) {
       chip.style.cursor = 'pointer'
       chip.addEventListener('click', () => {
@@ -969,6 +1007,12 @@ function abrirStockMuertoOverlay() {
 }
 function cerrarStockMuertoOverlay() {
   document.getElementById('stockMuertoOverlay').style.display = 'none'
+}
+function abrirVencimientosOverlay() {
+  document.getElementById('vencimientosOverlay').style.display = 'flex'
+}
+function cerrarVencimientosOverlay() {
+  document.getElementById('vencimientosOverlay').style.display = 'none'
 }
 
 // ---------------------------------------------------------------------------
@@ -1608,6 +1652,10 @@ function initApp() {
   document.getElementById('stockMuertoOverlay').addEventListener('click', (e) => {
     if (e.target.id === 'stockMuertoOverlay') cerrarStockMuertoOverlay()
   })
+  document.getElementById('btnCerrarVencimientos').addEventListener('click', cerrarVencimientosOverlay)
+  document.getElementById('vencimientosOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'vencimientosOverlay') cerrarVencimientosOverlay()
+  })
   document.getElementById('btnAuditoria').addEventListener('click', abrirAuditoria)
   document.getElementById('btnCerrarAuditoria').addEventListener('click', cerrarAuditoria)
   document.getElementById('auditoriaOverlay').addEventListener('click', (e) => {
@@ -1663,6 +1711,7 @@ function initApp() {
   cargarFechaMinima()
   cargarTendencia()
   cargarSalud()
+  cargarVencimientos()
   cargarUltimaAlerta()
   // Esperada antes de cargar() -- si no, pintar() puede correr antes de que
   // se sepa si ya existe una meta guardada, y muestra el formulario "cargar

@@ -256,6 +256,22 @@
   </div>
 </div>
 
+<!-- VENCIMIENTOS: LISTA DE PRÓXIMOS A VENCER (se abre desde el chip del panel de alertas) -->
+<div id="vencimientosOverlay" class="auditoria-overlay" style="display:none">
+  <div class="auditoria-panel">
+    <div class="auditoria-panel-header">
+      <div>
+        <h2>⏳ Próximos a vencer <span id="vencimientosCount" class="badge" style="vertical-align: middle; margin-left: 8px;"></span></h2>
+        <p class="subtitle">Lotes con fecha de vencimiento cargada por el equipo, ordenados por urgencia. Solo lectura -- la carga y las omisiones se hacen desde la app de Vencimientos.</p>
+      </div>
+      <button id="btnCerrarVencimientos" class="btn-close" aria-label="Cerrar" type="button">✕</button>
+    </div>
+    <div class="auditoria-body">
+      <div id="vencimientos" class="table-wrap scroll-y-big"></div>
+    </div>
+  </div>
+</div>
+
 <!-- AUDITORÍA DE COMPRA OVERLAY -->
 <div id="auditoriaOverlay" class="auditoria-overlay" style="display:none">
   <div class="auditoria-panel">
